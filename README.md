@@ -43,7 +43,7 @@ changes are needed. The trial shows a watermark.
 | BR-06 grouping None / User / Department / Project, plus Priority (P1, P2, P3, No priority) | `model.ts` (`laneKeys`); departments from the users API |
 | BR-07 movement rules: User lanes reassign, Department/Project lanes block vertical drag | `board.config.ts` (`beforeTaskDrop`, `taskDrop`) |
 | AC-07.3 / C-02 one task in several lanes | one card record per lane sharing `taskId` |
-| BR-08/09 saved, shareable views restoring filters, columns, grouping | `/api/kanban/views`, `?view=<id>` |
+| BR-08/09 saved, shareable views restoring filters, columns, grouping, list / Kanban mode | `/api/kanban/views`, `?view=<id>`; the address bar also carries the whole configuration (`web/src/chrome/urlState.ts`), so a copied URL reproduces the view through the viewer's own permissions |
 | BR-10 guardrails: office default, recency window, cap, notice | `routes/tasks.js` (`applyGuardrails`); they step aside as soon as the user applies a preset or a filter (`userHasFiltered`); the notice is a 10-second toast on load and a line in the (i) popover (`TaskWorkspace.tsx`) |
 | BR-11 quick search over the active dataset | client-side `matchesSearch` |
 | BR-12 compact cards, hover preview | one card per row, two-row template (`card.ts`); the card size selector was removed on 14 Sep; hover preview after 1.4s (`cardPreview`) |
@@ -96,6 +96,11 @@ field is set to the rank, so Bryntum's ordering and the persisted order never di
   project code shown on cards (`jobExtension`), the Project Manager, brand and office of
   each task's project. The Project Manager filter is applied after the fetch (it is not a
   tickets-API key); Brand and Office map to the API's `brands` / `clients` keys.
+- "Updated within" (`filter[updated_from]`, `filter[updated_to]`, last activity) is applied
+  after the fetch like Project Manager: the tickets API has no activity-date key. When the
+  guardrails narrow a view, the office and the recency window they applied appear in the
+  flyout and as chips; the first filter change the user makes turns them into explicit
+  filters, so the view stays inside that office and window unless the user removes them.
 - Filter pick-lists: `GET /api/tasks/options` derives assignees, project managers,
   offices, brands, tags and statuses from the tasks the user can see. Pronto's own lookup
   endpoints replace this in the product.

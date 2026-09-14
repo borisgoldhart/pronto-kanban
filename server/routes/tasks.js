@@ -84,7 +84,7 @@ function filterFixtureRows(rows, { preset, filter, identity }) {
 }
 
 /** Keys that mean the user has narrowed the query themselves (BR-10 guardrails then step aside). */
-const USER_FILTER_KEYS = ["search", "assignees", "pm", "tags", "show_escalated_ticket", "reported_by", "ticket_type", "departments", "start_date", "end_date", "parent_ticket_id", "priority_new", "brands", "jobs", "clients", "products", "show_tasks_starred", "show_tasks_stakeholder"];
+const USER_FILTER_KEYS = ["search", "assignees", "pm", "updated_from", "updated_to", "tags", "show_escalated_ticket", "reported_by", "ticket_type", "departments", "start_date", "end_date", "parent_ticket_id", "priority_new", "brands", "jobs", "clients", "products", "show_tasks_starred", "show_tasks_stakeholder"];
 function userHasFiltered(preset, filter) {
   if (preset && preset !== "all") return true;
   if (Array.isArray(filter.status) && filter.status.some((s) => /^\d+$/.test(String(s)))) return true;
@@ -200,6 +200,10 @@ router.get("/", async (req, res) => {
   // Project Manager is not a tickets-API filter: it is applied after the fetch, via the job lookup.
   const pmFilter = Array.isArray(filter.pm) ? filter.pm.map(Number) : (filter.pm ? [Number(filter.pm)] : []);
   delete filter.pm;
+  // "Updated within" (last activity) is applied after the fetch too: the API has no activity-date key.
+  const updatedFrom = filter.updated_from ? Date.parse(`${String(filter.updated_from).slice(0, 10)}T00:00:00`) : null;
+  const updatedTo = filter.updated_to ? Date.parse(`${String(filter.updated_to).slice(0, 10)}T23:59:59`) : null;
+  delete filter.updated_from; delete filter.updated_to;
   const guard = scope === "explorer" && narrow && !userHasFiltered(preset, filter);
   const explorerDefault = guard && me?.clientId;
 
@@ -223,6 +227,10 @@ router.get("/", async (req, res) => {
 
   await enrichFromJobs(auth, tasks);
   if (pmFilter.length) { tasks = tasks.filter((t) => pmFilter.includes(t.projectManagerId)); total = tasks.length; truncated = false; }
+  if (updatedFrom || updatedTo) {
+    tasks = tasks.filter((t) => { const ms = activityMs(t); return (!updatedFrom || ms >= updatedFrom) && (!updatedTo || ms <= updatedTo); });
+    total = tasks.length; truncated = false;
+  }
 
   if (guard) tasks = applyGuardrails(tasks, total, narrowed);
   else { narrowed.total = total; narrowed.shown = tasks.length; narrowed.threshold = SAFE_THRESHOLD; narrowed.applied = false; }

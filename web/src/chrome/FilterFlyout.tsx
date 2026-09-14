@@ -25,6 +25,8 @@ export type Filters = {
   reportedBy?: string;
   startDate?: string;
   endDate?: string;
+  updatedFrom?: string;      // last activity on or after (YYYY-MM-DD)
+  updatedTo?: string;        // last activity on or before
   parentTask?: string;
   taskType?: string;
 };
@@ -58,6 +60,8 @@ export function toApiFilter(f: Filters): Record<string, string | number | (strin
   if (f.reportedBy) out.reported_by = [f.reportedBy];
   if (f.startDate) out.start_date = f.startDate;
   if (f.endDate) out.end_date = f.endDate;
+  if (f.updatedFrom) out.updated_from = f.updatedFrom;
+  if (f.updatedTo) out.updated_to = f.updatedTo;
   if (f.parentTask) out.parent_ticket_id = f.parentTask;
   if (f.taskType && f.taskType !== "all") out.ticket_type = [f.taskType];
   return out;
@@ -99,6 +103,8 @@ export function appliedChips(f: Filters, options: FilterOptions | null, statuses
   if (f.reportedBy) out.push({ key: "reportedBy", label: `Reported by ${name(options?.assignees, f.reportedBy)}`, remove: (cur) => ({ ...cur, reportedBy: undefined }) });
   if (f.startDate) out.push({ key: "startDate", label: `From ${f.startDate}`, remove: (cur) => ({ ...cur, startDate: undefined }) });
   if (f.endDate) out.push({ key: "endDate", label: `To ${f.endDate}`, remove: (cur) => ({ ...cur, endDate: undefined }) });
+  if (f.updatedFrom) out.push({ key: "updatedFrom", label: `Updated since ${f.updatedFrom}`, remove: (cur) => ({ ...cur, updatedFrom: undefined }) });
+  if (f.updatedTo) out.push({ key: "updatedTo", label: `Updated until ${f.updatedTo}`, remove: (cur) => ({ ...cur, updatedTo: undefined }) });
   if (f.parentTask) out.push({ key: "parentTask", label: `Parent #${f.parentTask}`, remove: (cur) => ({ ...cur, parentTask: undefined }) });
   if (f.taskType && f.taskType !== "all") out.push({ key: "taskType", label: `Type: ${f.taskType}`, remove: (cur) => ({ ...cur, taskType: undefined }) });
   return out;
@@ -196,7 +202,9 @@ function Check({ label, checked, onChange, icon }: { label: string; checked: boo
 
 /* ---- the flyout ------------------------------------------------------------------- */
 
-export function FilterFlyout({ open, filters, onChange, onClose, tasks, statuses, options }: { open: boolean; filters: Filters; onChange: (f: Filters) => void; onClose: () => void; tasks: ProntoTask[]; statuses: StatusInfo[]; options: FilterOptions | null }) {
+export type FilterDefaults = { note: string; onShowEverything?: () => void } | null;
+
+export function FilterFlyout({ open, filters, onChange, onClose, tasks, statuses, options, defaults }: { open: boolean; filters: Filters; onChange: (f: Filters) => void; onClose: () => void; tasks: ProntoTask[]; statuses: StatusInfo[]; options: FilterOptions | null; defaults?: FilterDefaults }) {
   const [taskOpen, setTaskOpen] = useState(true);
 
   const opts = useMemo(() => ({
@@ -217,6 +225,13 @@ export function FilterFlyout({ open, filters, onChange, onClose, tasks, statuses
         <h2>Filters: Tasks</h2>
         <button type="button" className="pk-iconbtn" onClick={onClose} aria-label="Close filters"><IconClose /></button>
       </header>
+
+      {defaults && (
+        <div className="pk-flyout__note" role="note">
+          {defaults.note}
+          {defaults.onShowEverything && <> <button type="button" className="pk-link" onClick={defaults.onShowEverything}>Show everything</button></>}
+        </div>
+      )}
 
       <section className={`pk-flyout__section ${taskOpen ? "is-open" : ""}`}>
         <button type="button" className="pk-flyout__section-head" onClick={() => setTaskOpen((v) => !v)} aria-expanded={taskOpen}>
@@ -243,6 +258,17 @@ export function FilterFlyout({ open, filters, onChange, onClose, tasks, statuses
               <label className="pk-field">
                 <span className="pk-field__label">End Date</span>
                 <span className="pk-field__control pk-field__control--date"><IconCalendar /><input type="date" value={filters.endDate || ""} onChange={(e) => set({ endDate: e.target.value })} /></span>
+              </label>
+            </div>
+            <div className="pk-field-row">
+              <label className="pk-field">
+                <span className="pk-field__label">Updated From</span>
+                <span className="pk-field__control pk-field__control--date"><IconCalendar /><input type="date" value={filters.updatedFrom || ""} onChange={(e) => set({ updatedFrom: e.target.value })} /></span>
+              </label>
+              <span className="pk-field-row__arrow"><IconArrowRight /></span>
+              <label className="pk-field">
+                <span className="pk-field__label">Updated To</span>
+                <span className="pk-field__control pk-field__control--date"><IconCalendar /><input type="date" value={filters.updatedTo || ""} onChange={(e) => set({ updatedTo: e.target.value })} /></span>
               </label>
             </div>
             <Select label="Parent Task" placeholder="Select Parent Group Task..." value={filters.parentTask} options={tasks.filter((t) => t.isParent || /parent/i.test(t.statusName)).map((t) => ({ value: String(t.id), label: t.title }))} onChange={(v) => set({ parentTask: v })} />

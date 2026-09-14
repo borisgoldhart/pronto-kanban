@@ -15,7 +15,8 @@ import { matchesSearch, toBoardTasks, toColumns, toLanes, type BoardTask, type G
 import { applyRemoteChange, type BoardCallbacks } from "../kanban/board.config";
 import { ControlStrip, GROUP_OPTIONS } from "../chrome/ControlStrip";
 import { LeftNav } from "../chrome/PageChrome";
-import { AppliedFilters, FilterFlyout, appliedChips, countActive, normaliseFilters, toApiFilter, type Filters } from "../chrome/FilterFlyout";
+import { AppliedFilters, FilterFlyout, appliedChips, countActive, normaliseFilters, toApiFilter, type FilterDefaults, type Filters } from "../chrome/FilterFlyout";
+import { readUrlState, urlHasState, writeUrlState } from "../chrome/urlState";
 import { CLIENT_ID, useKanbanChannel } from "../realtime";
 
 export type TaskWorkspaceProps = {
@@ -79,24 +80,26 @@ function useDebounced<T>(value: T, ms: number): T {
 }
 
 export function TaskWorkspace({ scope, job, boardKey, title, prontoBase, groupOptions, defaultGroupBy = "none", viewId }: TaskWorkspaceProps) {
-  const [preset, setPreset] = useState("all");
-  const [search, setSearch] = useState("");
+  // The address bar carries the configuration (urlState.ts); it wins over saved preferences.
+  const [fromUrl] = useState(() => ({ has: urlHasState(), state: readUrlState() }));
+  const [preset, setPreset] = useState(fromUrl.state.preset || "all");
+  const [search, setSearch] = useState(fromUrl.state.q || "");
   const q = useDebounced(search.trim(), 200);
-  const [filters, setFilters] = useState<Filters>({});
+  const [filters, setFilters] = useState<Filters>(normaliseFilters(fromUrl.state.filters as Record<string, unknown>));
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const [view, setView] = useState<"list" | "kanban">("kanban");
-  const [groupBy, setGroupBy] = useState<GroupBy>(defaultGroupBy);
+  const [view, setView] = useState<"list" | "kanban">(fromUrl.state.mode || "kanban");
+  const [groupBy, setGroupBy] = useState<GroupBy>(fromUrl.state.groupBy || defaultGroupBy);
   // Column visibility = defaults (Completed, Cancelled, Deleted, Parent hidden) + the user's explicit
   // hides and shows. Kept as two override lists so a default-hidden status (Parent) stays hidden
   // even when it first appears after the preferences were saved.
-  const [hiddenOverride, setHiddenOverride] = useState<Set<number>>(new Set());
-  const [shownOverride, setShownOverride] = useState<Set<number>>(new Set());
+  const [hiddenOverride, setHiddenOverride] = useState<Set<number>>(new Set(fromUrl.state.hidden || []));
+  const [shownOverride, setShownOverride] = useState<Set<number>>(new Set(fromUrl.state.shown || []));
   const [laneRequest, setLaneRequest] = useState<{ collapsed: boolean; seq: number } | null>(null);
   const [lanesOpen, setLanesOpen] = useState(false);                     // grouped boards open collapsed (all but the first lane)
   const toggleLanes = () => { setLaneRequest((r) => ({ collapsed: lanesOpen, seq: (r?.seq || 0) + 1 })); setLanesOpen((v) => !v); };
   useEffect(() => { setLanesOpen(false); }, [groupBy]);
   const [options, setOptions] = useState<FilterOptions | null>(null);
-  const [narrow, setNarrow] = useState(true);                            // BR-10 guardrails on
+  const [narrow, setNarrow] = useState(fromUrl.state.narrow !== false);  // BR-10 guardrails on
   const [prefsLoaded, setPrefsLoaded] = useState(false);
   const [views, setViews] = useState<SavedView[]>([]);
   const [activeView, setActiveView] = useState<string | null>(null);
@@ -119,9 +122,11 @@ export function TaskWorkspace({ scope, job, boardKey, title, prontoBase, groupOp
       try {
         const r = await api.prefs(boardKey);
         if (!alive) return;
-        if (r.prefs?.hiddenStatuses) setHiddenOverride(new Set(r.prefs.hiddenStatuses));
-        if (r.prefs?.shownStatuses) setShownOverride(new Set(r.prefs.shownStatuses));
-        if (r.prefs?.groupBy && GROUP_OPTIONS.some((g) => g.id === r.prefs?.groupBy)) setGroupBy(r.prefs.groupBy as GroupBy);
+        if (!fromUrl.has) {
+          if (r.prefs?.hiddenStatuses) setHiddenOverride(new Set(r.prefs.hiddenStatuses));
+          if (r.prefs?.shownStatuses) setShownOverride(new Set(r.prefs.shownStatuses));
+          if (r.prefs?.groupBy && GROUP_OPTIONS.some((g) => g.id === r.prefs?.groupBy)) setGroupBy(r.prefs.groupBy as GroupBy);
+        }
       } catch { /* defaults */ }
       try { const o = await api.filterOptions(); if (alive) setOptions(o); } catch { /* the flyout falls back to the loaded data */ }
       try { const v = await api.views(); if (alive) setViews(v.views.filter((x) => x.board === boardKey)); } catch { /* none */ }
@@ -143,8 +148,13 @@ export function TaskWorkspace({ scope, job, boardKey, title, prontoBase, groupOp
     }, 400);
   }, [hiddenOverride, shownOverride, groupBy, boardKey, prefsLoaded]);
 
+  useEffect(() => {
+    if (!prefsLoaded) return;
+    writeUrlState({ preset, q: search, mode: view, groupBy, hidden: [...hiddenOverride], shown: [...shownOverride], narrow, filters });
+  }, [prefsLoaded, preset, search, view, groupBy, hiddenOverride, shownOverride, narrow, filters]);
+
   function currentViewState(): ViewState {
-    return { preset, q: search, filters, hiddenStatuses: [...hiddenOverride], shownStatuses: [...shownOverride], groupBy, narrow };
+    return { preset, q: search, filters, hiddenStatuses: [...hiddenOverride], shownStatuses: [...shownOverride], groupBy, mode: view, narrow };
   }
   function applyView(state: ViewState, id: string | null) {
     if (state.preset) setPreset(state.preset);
@@ -153,6 +163,7 @@ export function TaskWorkspace({ scope, job, boardKey, title, prontoBase, groupOp
     if (state.hiddenStatuses) setHiddenOverride(new Set(state.hiddenStatuses));
     if (state.shownStatuses) setShownOverride(new Set(state.shownStatuses));
     if (state.groupBy && GROUP_OPTIONS.some((g) => g.id === state.groupBy)) setGroupBy(state.groupBy as GroupBy);
+    if (state.mode === "list" || state.mode === "kanban") setView(state.mode);
     if (typeof state.narrow === "boolean") setNarrow(state.narrow);
     setActiveView(id);
   }
@@ -242,7 +253,6 @@ export function TaskWorkspace({ scope, job, boardKey, title, prontoBase, groupOp
   const groupKey = `${groupBy}|${statuses.map((s) => s.id).join(",")}|${lanes.map((l) => l.id).join(",")}`;
   // Grouped boards open with only the first swimlane expanded; the rest unfold on demand.
   const collapsedLanes = useMemo(() => new Set(lanes.slice(1).map((l) => l.id)), [lanes]);
-  const chips = useMemo(() => appliedChips(filters, options, statuses), [filters, options, statuses]);
 
   const callbacks = useMemo<BoardCallbacks>(() => ({
     onMove: async ({ taskId, fromStatus, statusId, prevRank, nextRank }) => {
@@ -290,6 +300,23 @@ export function TaskWorkspace({ scope, job, boardKey, title, prontoBase, groupOp
     const t = window.setTimeout(() => setToastKey((k) => (k === narrowKey ? null : k)), 10_000);
     return () => window.clearTimeout(t);
   }, [narrowKey]);
+  // What the guardrails applied, as filters the user can see and edit (office, updated-within).
+  // They show in the flyout and as chips; the first change the user makes turns them into
+  // explicit filters, so the view stays within the same office and window unless they say otherwise.
+  const guardFilters = useMemo<Filters>(() => {
+    if (!n?.applied) return {};
+    const g: Filters = {};
+    if (n.office && !filters.offices?.length) g.offices = [String(n.office.id)];
+    if (n.recencyDays && !filters.updatedFrom) { const d = new Date(Date.now() - n.recencyDays * 86_400_000); g.updatedFrom = d.toISOString().slice(0, 10); }
+    return g;
+  }, [n, filters.offices, filters.updatedFrom]);
+  const effectiveFilters = useMemo<Filters>(() => ({ ...guardFilters, ...filters }), [guardFilters, filters]);
+  const changeFilters = (f: Filters) => { setFilters(f); setActiveView(null); };
+  const chips = useMemo(() => appliedChips(effectiveFilters, options, statuses), [effectiveFilters, options, statuses]);
+  const filterDefaults: FilterDefaults = n?.applied ? {
+    note: `Default view: ${[n.office ? `your office (${n.office.name})` : null, n.recencyDays ? `updated in the last ${n.recencyDays} days` : null, n.cappedTo ? `the ${n.cappedTo} most recently active` : null].filter(Boolean).join(", ")}, because the full set is above the ${n.threshold.toLocaleString()}-task limit. The office and date below are those defaults; change any filter to take over.`,
+    onShowEverything: () => { setFiltersOpen(false); setNarrow(false); },
+  } : null;
   const narrowedText = n?.applied ? [
     n.office ? `your office (${n.office.name})` : null,
     n.recencyDays ? `activity in the last ${n.recencyDays} days` : null,
@@ -310,7 +337,7 @@ export function TaskWorkspace({ scope, job, boardKey, title, prontoBase, groupOp
           statuses={statuses} hidden={hiddenSet} onToggleStatus={toggleStatus} onShowAllStatuses={showAllStatuses}
           filtersOpen={filtersOpen} filterCount={countActive(filters)} onToggleFilters={() => setFiltersOpen((v) => !v)}
           onResetOrder={resetOrder} onReload={() => load()} onSaveView={saveCurrentView} source={meta.source} live={live}
-          chips={<AppliedFilters chips={chips} filters={filters} onChange={(f) => { setFilters(f); setActiveView(null); }} />}
+          chips={<AppliedFilters chips={chips} filters={effectiveFilters} onChange={changeFilters} />}
           info={<>
             {narrowedText && <div className="pk-info__row pk-info__row--guard">Narrowed to {narrowedText} (the full set is above the {n!.threshold.toLocaleString()}-task limit). <button type="button" className="pk-link" onClick={() => setNarrow(false)}>Show everything</button></div>}
             {!narrow && scope === "explorer" && <div className="pk-info__row pk-info__row--guard">Guardrails are off: showing up to {meta.truncated ? "the first " : ""}{tasks.length.toLocaleString()} tasks{meta.truncated ? ` of ${meta.total.toLocaleString()}` : ""}. <button type="button" className="pk-link" onClick={() => setNarrow(true)}>Back to the default view</button></div>}
@@ -341,7 +368,7 @@ export function TaskWorkspace({ scope, job, boardKey, title, prontoBase, groupOp
         </div>
       </main>
 
-      <FilterFlyout open={filtersOpen} filters={filters} onChange={(f) => { setFilters(f); setActiveView(null); }} onClose={() => setFiltersOpen(false)} tasks={tasks} statuses={statuses} options={options} />
+      <FilterFlyout open={filtersOpen} filters={effectiveFilters} onChange={changeFilters} onClose={() => setFiltersOpen(false)} tasks={tasks} statuses={statuses} options={options} defaults={filterDefaults} />
     </div>
   );
 }

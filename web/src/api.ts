@@ -70,7 +70,7 @@ export type Narrowed = {
 
 export type SavedView = { id: string; name: string; board: string; createdAt: string; state?: ViewState; owner?: string };
 /** zoom: no longer used (older saved views may still carry it). */
-export type ViewState = { preset?: string; q?: string; filters?: Record<string, unknown>; hiddenStatuses?: number[]; shownStatuses?: number[]; groupBy?: string; zoom?: number; narrow?: boolean };
+export type ViewState = { preset?: string; q?: string; filters?: Record<string, unknown>; hiddenStatuses?: number[]; shownStatuses?: number[]; groupBy?: string; mode?: "list" | "kanban"; zoom?: number; narrow?: boolean };
 
 export type StatusInfo = { id: number; name: string; color: string; count: number; hiddenByDefault: boolean; isParent?: boolean };
 
