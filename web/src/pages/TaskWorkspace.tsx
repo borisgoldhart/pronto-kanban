@@ -3,7 +3,7 @@
  * saved views, search), control strip, the board (or list) and the filter flyout.
  *
  * Owns the query (preset + advanced filters), the quick search (client-side, over the
- * loaded dataset: BR-11), the board configuration (hidden columns, group-by, zoom; saved
+ * loaded dataset: BR-11), the board configuration (hidden columns, group-by; saved
  * per user per board), saved views (BR-08/09), the guardrail notice (BR-10), the
  * persistence callbacks and the live channel (BR-15).
  */
@@ -12,7 +12,7 @@ import type { TaskBoard } from "@bryntum/taskboard";
 import { api, ApiError, type FilterOptions, type Narrowed, type ProntoTask, type SavedView, type StatusInfo, type TaskQuery, type ViewState } from "../api";
 import { KanbanBoard } from "../kanban/KanbanBoard";
 import { matchesSearch, toBoardTasks, toColumns, toLanes, type BoardTask, type GroupBy } from "../kanban/model";
-import { DEFAULT_ZOOM, ZOOM_LEVELS, applyRemoteChange, type BoardCallbacks } from "../kanban/board.config";
+import { applyRemoteChange, type BoardCallbacks } from "../kanban/board.config";
 import { ControlStrip, GROUP_OPTIONS } from "../chrome/ControlStrip";
 import { LeftNav } from "../chrome/PageChrome";
 import { AppliedFilters, FilterFlyout, appliedChips, countActive, normaliseFilters, toApiFilter, type Filters } from "../chrome/FilterFlyout";
@@ -87,7 +87,6 @@ export function TaskWorkspace({ scope, job, boardKey, title, prontoBase, groupOp
   const [view, setView] = useState<"list" | "kanban">("kanban");
   const [groupBy, setGroupBy] = useState<GroupBy>(defaultGroupBy);
   const [hidden, setHidden] = useState<Set<number> | null>(null);       // null = use defaults
-  const [zoom, setZoom] = useState(DEFAULT_ZOOM);
   const [laneRequest, setLaneRequest] = useState<{ collapsed: boolean; seq: number } | null>(null);
   const [options, setOptions] = useState<FilterOptions | null>(null);
   const [narrow, setNarrow] = useState(true);                            // BR-10 guardrails on
@@ -115,7 +114,6 @@ export function TaskWorkspace({ scope, job, boardKey, title, prontoBase, groupOp
         if (!alive) return;
         if (r.prefs?.hiddenStatuses) setHidden(new Set(r.prefs.hiddenStatuses));
         if (r.prefs?.groupBy && GROUP_OPTIONS.some((g) => g.id === r.prefs?.groupBy)) setGroupBy(r.prefs.groupBy as GroupBy);
-        if (typeof r.prefs?.zoom === "number" && Number.isInteger(r.prefs.zoom) && r.prefs.zoom >= 0 && r.prefs.zoom < ZOOM_LEVELS.length) setZoom(r.prefs.zoom);
       } catch { /* defaults */ }
       try { const o = await api.filterOptions(); if (alive) setOptions(o); } catch { /* the flyout falls back to the loaded data */ }
       try { const v = await api.views(); if (alive) setViews(v.views.filter((x) => x.board === boardKey)); } catch { /* none */ }
@@ -133,12 +131,12 @@ export function TaskWorkspace({ scope, job, boardKey, title, prontoBase, groupOp
     if (!prefsLoaded) return;
     if (saveTimer.current) window.clearTimeout(saveTimer.current);
     saveTimer.current = window.setTimeout(() => {
-      api.savePrefs(boardKey, { hiddenStatuses: hidden ? [...hidden] : undefined, groupBy, zoom }).catch(() => { /* best effort */ });
+      api.savePrefs(boardKey, { hiddenStatuses: hidden ? [...hidden] : undefined, groupBy }).catch(() => { /* best effort */ });
     }, 400);
-  }, [hidden, groupBy, zoom, boardKey, prefsLoaded]);
+  }, [hidden, groupBy, boardKey, prefsLoaded]);
 
   function currentViewState(): ViewState {
-    return { preset, q: search, filters, hiddenStatuses: hidden ? [...hidden] : undefined, groupBy, zoom, narrow };
+    return { preset, q: search, filters, hiddenStatuses: hidden ? [...hidden] : undefined, groupBy, narrow };
   }
   function applyView(state: ViewState, id: string | null) {
     if (state.preset) setPreset(state.preset);
@@ -146,7 +144,6 @@ export function TaskWorkspace({ scope, job, boardKey, title, prontoBase, groupOp
     setFilters(normaliseFilters(state.filters));
     if (state.hiddenStatuses) setHidden(new Set(state.hiddenStatuses));
     if (state.groupBy && GROUP_OPTIONS.some((g) => g.id === state.groupBy)) setGroupBy(state.groupBy as GroupBy);
-    if (typeof state.zoom === "number" && Number.isInteger(state.zoom) && state.zoom >= 0 && state.zoom < ZOOM_LEVELS.length) setZoom(state.zoom);
     if (typeof state.narrow === "boolean") setNarrow(state.narrow);
     setActiveView(id);
   }
@@ -175,10 +172,15 @@ export function TaskWorkspace({ scope, job, boardKey, title, prontoBase, groupOp
   /* ---- data ------------------------------------------------------------------ */
   const query = useMemo<TaskQuery>(() => ({ scope, job, preset, narrow, filter: toApiFilter(filters) }), [scope, job, preset, narrow, filters]);
 
+  const fingerprint = useRef("");
   const load = useCallback(async (silent = false) => {
     if (!silent) { setLoading(true); setError(null); }
     try {
       const r = await api.tasks(query);
+      // A silent refresh that brings back the same board is a no-op: no store reload, no re-render.
+      const fp = r.tasks.map((t) => `${t.id}:${t.statusId}:${t.rank}:${t.activity}:${t.assignees.map((a) => a.id).join(",")}`).join("|");
+      if (silent && fp === fingerprint.current) return;
+      fingerprint.current = fp;
       tasksRef.current = r.tasks;
       setTasks(r.tasks); setStatuses(r.statuses);
       setMeta({ total: r.total, source: r.source, truncated: r.truncated, narrowed: r.narrowed, office: r.me?.office || null });
@@ -214,7 +216,13 @@ export function TaskWorkspace({ scope, job, boardKey, title, prontoBase, groupOp
   /* ---- board inputs ---------------------------------------------------------- */
   const visibleTasks = useMemo(() => (q ? tasks.filter((t) => matchesSearch(t, q)) : tasks), [tasks, q]);
   const hiddenSet = useMemo(() => hidden ?? new Set(statuses.filter((s) => s.hiddenByDefault).map((s) => s.id)), [hidden, statuses]);
-  const columns = useMemo(() => toColumns(statuses, hiddenSet), [statuses, hiddenSet]);
+  // Grouped views: a status with no task in the loaded set would be an empty column in
+  // every lane, and TaskBoard's cost grows with lanes x columns, so those columns are
+  // left out (the Columns menu still lists them with a count of 0).
+  const columns = useMemo(() => {
+    const cols = toColumns(statuses, hiddenSet);
+    return groupBy === "none" ? cols : cols.map((c) => (c.count === 0 ? { ...c, hidden: true } : c));
+  }, [statuses, hiddenSet, groupBy]);
   const lanes = useMemo(() => toLanes(visibleTasks, groupBy), [visibleTasks, groupBy]);
   const boardTasks = useMemo(() => toBoardTasks(visibleTasks, groupBy), [visibleTasks, groupBy]);
   const groupKey = `${groupBy}|${statuses.map((s) => s.id).join(",")}|${lanes.map((l) => l.id).join(",")}`;
@@ -274,7 +282,6 @@ export function TaskWorkspace({ scope, job, boardKey, title, prontoBase, groupOp
           onExpandAll={() => setLaneRequest((r) => ({ collapsed: false, seq: (r?.seq || 0) + 1 }))}
           onCollapseAll={() => setLaneRequest((r) => ({ collapsed: true, seq: (r?.seq || 0) + 1 }))}
           statuses={statuses} hidden={hiddenSet} onToggleStatus={toggleStatus} onShowAllStatuses={() => setHidden(new Set())}
-          zoom={zoom} onZoom={setZoom}
           filtersOpen={filtersOpen} filterCount={countActive(filters)} onToggleFilters={() => setFiltersOpen((v) => !v)}
           onResetOrder={resetOrder} onReload={() => load()} onSaveView={saveCurrentView} source={meta.source} live={live}
         />
@@ -296,7 +303,7 @@ export function TaskWorkspace({ scope, job, boardKey, title, prontoBase, groupOp
 
         <div ref={areaRef} className={`pk-board-area ${loading ? "is-loading" : ""}`}>
           {view === "kanban" ? (
-            <KanbanBoard tasks={boardTasks} columns={columns} lanes={lanes} groupBy={groupBy} groupKey={groupKey} zoom={zoom} showProjectOnCards={scope === "explorer" && groupBy !== "project"}
+            <KanbanBoard tasks={boardTasks} columns={columns} lanes={lanes} groupBy={groupBy} groupKey={groupKey} showProjectOnCards={scope === "explorer" && groupBy !== "project"}
               collapsedLanes={collapsedLanes} laneRequest={laneRequest} callbacks={callbacks} boardRef={boardRef} />
           ) : (
             <TaskList tasks={visibleTasks} onOpen={callbacks.onOpen} />

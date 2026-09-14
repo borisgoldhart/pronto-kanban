@@ -3,16 +3,12 @@
  * Kanban controls sit on the same line as the filter and export buttons, the zoom is
  * compact, and the supplementary actions live behind an ellipsis).
  *
- *   ALL TASKS  16 tasks        [list|kanban]  Group by [Project v] [expand|collapse]  [Columns v]  [- Large +]  [filter]  [...]
- *
- * Zoom steps through the card size levels (large / medium / small): each is a different
- * card template, the way Bryntum's zooming demo works, not a CSS scale.
+ *   ALL TASKS  16 tasks        [list|kanban]  Group by [Project v] [expand|collapse]  [Columns v]  [filter]  [...]
  */
 import { useState } from "react";
 import type { GroupBy } from "../kanban/model";
-import { ZOOM_LEVELS, zoomLevel } from "../kanban/board.config";
 import type { StatusInfo } from "../api";
-import { IconCheck, IconChevronDown, IconCollapseAll, IconColumns, IconEllipsis, IconExpandAll, IconExport, IconFilter, IconKanban, IconList, IconLive, IconRefresh, IconSave, IconZoomIn, IconZoomOut } from "./icons";
+import { IconCheck, IconChevronDown, IconCollapseAll, IconColumns, IconEllipsis, IconExpandAll, IconExport, IconFilter, IconKanban, IconList, IconLive, IconRefresh, IconSave } from "./icons";
 import { Popover } from "./Popover";
 
 /** BRD BR-06: no grouping, User, Department, Project (User Group and Office are out of the MVP). */
@@ -38,8 +34,6 @@ export type ControlStripProps = {
   hidden: Set<number>;
   onToggleStatus: (id: number) => void;
   onShowAllStatuses: () => void;
-  zoom: number;                 // ZOOM_LEVELS index
-  onZoom: (z: number) => void;
   filtersOpen: boolean;
   filterCount: number;
   onToggleFilters: () => void;
@@ -53,7 +47,6 @@ export type ControlStripProps = {
 export function ControlStrip(p: ControlStripProps) {
   const [menu, setMenu] = useState<"group" | "columns" | "more" | null>(null);
   const toggle = (m: typeof menu) => setMenu((cur) => (cur === m ? null : m));
-  const zi = Math.min(ZOOM_LEVELS.length - 1, Math.max(0, p.zoom));
   const groupLabel = (p.groupOptions || GROUP_OPTIONS).find((g) => g.id === p.groupBy)?.label || "None";
   const hiddenCount = p.statuses.filter((s) => p.hidden.has(s.id)).length;
 
@@ -110,12 +103,6 @@ export function ControlStrip(p: ControlStripProps) {
               })}
             </div>
           </Popover>
-        </div>
-
-        <div className="pk-zoom" role="group" aria-label="Card size" title="Card size: large, medium or small cards (a different card template per level)">
-          <button type="button" className="pk-iconbtn" onClick={() => p.onZoom(zi + 1)} disabled={zi >= ZOOM_LEVELS.length - 1} title="Smaller cards"><IconZoomOut /></button>
-          <span className="pk-zoom__value">{zoomLevel(zi).label}</span>
-          <button type="button" className="pk-iconbtn" onClick={() => p.onZoom(zi - 1)} disabled={zi <= 0} title="Larger cards"><IconZoomIn /></button>
         </div>
 
         <button type="button" className={`pk-iconbtn pk-iconbtn--boxed ${p.filtersOpen || p.filterCount ? "is-active" : ""}`} onClick={p.onToggleFilters} title="Filters" aria-pressed={p.filtersOpen}>

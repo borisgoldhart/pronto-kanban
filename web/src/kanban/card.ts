@@ -28,17 +28,28 @@ export function initials(name: string): string {
   return name.split(/[\s.@]+/).filter(Boolean).slice(0, 2).map((s) => s[0]?.toUpperCase() || "").join("");
 }
 
-export function avatarHtml(a: { name: string; avatarUrl: string | null }, size = 22): string {
+/** A stable pastel per person, from the name, so the same initials read the same everywhere. */
+function avatarHue(name: string): number {
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
+  return h % 360;
+}
+
+/**
+ * Initials in a coloured circle. No image: a board of 1,500 cards would otherwise fire
+ * 1,500 avatar requests, and the initials are what people scan anyway.
+ */
+export function avatarHtml(a: { name: string; avatarUrl?: string | null }, size = 22): string {
   const alt = enc(a.name);
-  if (a.avatarUrl) return `<span class="pk-avatar" title="${alt}" style="width:${size}px;height:${size}px"><img src="${enc(a.avatarUrl)}" alt="${alt}" loading="lazy" onerror="this.parentNode.classList.add('pk-avatar--fallback');this.remove()"><span class="pk-avatar__initials">${enc(initials(a.name))}</span></span>`;
-  return `<span class="pk-avatar pk-avatar--fallback" title="${alt}" style="width:${size}px;height:${size}px"><span class="pk-avatar__initials">${enc(initials(a.name))}</span></span>`;
+  const hue = avatarHue(a.name);
+  return `<span class="pk-avatar pk-avatar--fallback" title="${alt}" style="width:${size}px;height:${size}px;background:hsl(${hue} 45% 86%);color:hsl(${hue} 40% 28%)"><span class="pk-avatar__initials">${enc(initials(a.name))}</span></span>`;
 }
 
 export type CardSize = "large" | "medium" | "small";
 
 /**
- * Row 1: the title on one line (the full title is in the hover preview and the
- * native tooltip), the escalation flag at the end. Small cards wrap to two lines
+ * Row 1: the title on one line (the full title is in the hover preview), the escalation
+ * flag at the end. Small cards wrap to two lines
  * instead, since they carry almost nothing else.
  */
 export function cardTitle(task: BoardTask, size: CardSize = "large"): string {
@@ -46,7 +57,7 @@ export function cardTitle(task: BoardTask, size: CardSize = "large"): string {
     const more = (task as BoardTask & { moreCount?: number }).moreCount || 0;
     return `<div class="pk-more"><span class="pk-more__label">${enc(task.name)}</span><span class="pk-more__hint">${more} not shown</span></div>`;
   }
-  return `<div class="pk-card-title pk-card-title--${size}" title="${enc(task.name)}">
+  return `<div class="pk-card-title pk-card-title--${size}">
     <span class="pk-card-title__text">${enc(task.name)}</span>
     ${task.escalated ? `<span class="pk-flag pk-flag--escalated" title="Escalated">${ICON_FLAME}</span>` : ""}
   </div>`;

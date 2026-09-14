@@ -46,7 +46,7 @@ changes are needed. The trial shows a watermark.
 | BR-08/09 saved, shareable views restoring filters, columns, grouping | `/api/kanban/views`, `?view=<id>` |
 | BR-10 guardrails: office default, recency window, cap, notice | `routes/tasks.js` (`applyGuardrails`); they step aside as soon as the user applies a preset or a filter (`userHasFiltered`); notice in `TaskWorkspace.tsx` |
 | BR-11 quick search over the active dataset | client-side `matchesSearch` |
-| BR-12 compact cards, zoom, hover preview | zoom = card size levels large / medium / small, each a different card template via TaskBoard `cardSizes` + `tasksPerRow` (the pattern of Bryntum's zooming demo, not CSS scaling): `board.config.ts` (`ZOOM_LEVELS`), `card.ts` (`cardTitle`/`cardMeta` per size, `cardPreview`) |
+| BR-12 compact cards, hover preview | one card per row, two-row template (`card.ts`); the card size selector was removed on 14 Sep; hover preview after 1.4s (`cardPreview`) |
 | BR-06 grouped boards open with only the first swimlane expanded; Expand all / Collapse all in the strip | `TaskWorkspace.tsx` (`collapsedLanes`), `board.config.ts` (`setAllLanesCollapsed`) |
 | Performance on grouped boards: only expanded lanes hold cards (lane-lazy loading); header counts from the full list | `web/src/kanban/lanes.ts` (`LaneSource`), wired in `board.config.ts` |
 | BR-13 parent / subtask marker | `isParent`, `parentId` chips |
@@ -130,6 +130,18 @@ field is set to the rank, so Bryntum's ordering and the persisted order never di
 - Measured (headless Chromium, 1,556 tasks, 20 columns): flat board first cards in about
   1s with 1.1s of main-thread work; grouped board (26 lanes, first lane open) 1.7s. The
   remaining fixed cost is TaskBoard creating a column element per lane per column.
+- **Trial watermark.** Switching a 1,300-task board to User grouping (56 lanes x 38
+  columns = 2,128 cells) took 19s in the profiler; 17s of it was the trial package's
+  `setWaterMark`, which builds a data-URL SVG background per cell (plus `btoa`, `URL`,
+  `queryString`). Its cost grows faster than the cell count (1,120 cells: 5s). The licensed
+  package has no watermark, so this cost disappears with the licence; until then keep
+  grouped views to the columns in use. Grouped views also leave out statuses with no task
+  in the loaded set (empty in every lane), which halves the cells on a typical board.
+- Live updates (Pusher) are not a factor: the client only listens, and the two-minute
+  refresh now compares a fingerprint of the response and touches nothing when the board
+  is unchanged.
+- Avatars are initials in a coloured circle, no image requests (1,500 cards would mean
+  1,500 avatar fetches).
 - Cards are two rows of static HTML; `useDomTransition` is off; the initial task list is
   loaded once (the wrapper skips the duplicate load React effects would otherwise cause).
 - Beyond this, the scalable answer is per-column paging: load the top N cards of each

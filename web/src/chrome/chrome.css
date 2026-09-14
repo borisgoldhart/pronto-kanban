@@ -75,8 +75,6 @@ body { display: flex; flex-direction: column; }
 .pk-select:hover { background: #f7f7f8; }
 .pk-select > svg:last-child { color: var(--pk-muted); }
 
-.pk-zoom { display: inline-flex; align-items: center; gap: 2px; height: 36px; padding: 0 4px; border: 1px solid var(--pk-line-strong); border-radius: 4px; background: #fff; }
-.pk-zoom__value { min-width: 56px; text-align: center; font-size: 12.5px; color: var(--pk-ink); }
 .pk-seg--lanes .pk-seg__btn { font-size: 12px; gap: 6px; }
 .pk-seg--lanes .pk-seg__btn span { display: inline; }
 
