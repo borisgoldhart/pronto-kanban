@@ -8,8 +8,8 @@
   --pk-font: var(--pp-font, "Lato", -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif);
   --pk-ink: var(--pp-ink, #18181a);
   --pk-muted: var(--pp-muted, #8a94a1);
-  --pk-line: var(--pp-line, #e5e8ec);
-  --pk-line-strong: var(--pp-line-strong, #cac9cc);
+  --pk-line: #e5e8ec;
+  --pk-line-strong: #cac9cc;
   --pk-column-bg: #f4f5f7;
   --pk-card-bg: #ffffff;
   --pk-radius: 6px;
@@ -20,7 +20,7 @@
   display: flex;
   flex-direction: column;
   font-family: var(--pk-font);
-  font-size: 13px;
+  font-size: 12px;                 /* Beta's table density: 12px Lato */
 }
 
 /* The board fills its host; the host is sized by the page (flex column). */
@@ -98,9 +98,9 @@
    the Columns menu in the control strip). ------------------------------------- */
 .pk-status-pill {
   display: inline-flex; align-items: center; max-width: 100%;
-  padding: 0.32em 0.9em; border-radius: 999px;
+  padding: 0.25em 0.75em; border-radius: 999px;
   background: var(--pk-status, #999); color: #fff;
-  font-size: 0.95em; font-weight: 700; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  font-size: 0.95em; font-weight: 600; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   letter-spacing: 0.01em;
 }
 .pk-board-host .b-task-board-column-header { position: relative; border-radius: var(--pk-radius) var(--pk-radius) 0 0; overflow: hidden; }
