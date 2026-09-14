@@ -110,14 +110,26 @@ field is set to the rank, so Bryntum's ordering and the persisted order never di
 
 - Guardrails (BR-10) keep a Task Explorer board at `KANBAN_SAFE_THRESHOLD` tasks (default
   300) unless the user filters or asks for everything.
-- Grouped boards are lane-lazy (`lanes.ts`): only the expanded swimlanes have cards in
-  TaskBoard's store and in the DOM. A board with 3,000 tasks in 40 lanes renders only the
-  open lane. Counts in lane and column headers come from the full list. When a lane opens,
-  its cards are added, taking status / rank / assignees from any sibling card of the same
-  task already on the board.
-- Flat boards above 400 cards use TaskBoard's own `virtualize` (cards rendered only for the
-  visible part of each column). It is not used with swimlanes: its height estimate is taken
-  while lanes are collapsed and expanded lanes come out a few pixels tall.
+- The render window (`lanes.ts`, `LaneSource`) decides which of the loaded tasks are in
+  TaskBoard's store and in the DOM:
+  - Lane-lazy loading: only the expanded swimlanes have cards. A board with 3,000 tasks in
+    40 lanes renders only the open lane. When a lane opens, its cards are added, taking
+    status / rank / assignees from any sibling card of the same task already on the board.
+  - Per-column paging: each column (per lane) shows its first `COLUMN_PAGE` (100) cards by
+    rank and a "Show N more" card at the bottom that reveals the next page. Nothing is
+    dropped: the full list stays loaded, header counts, search and filters see everything;
+    only the rendering is paged. In production this is one query per column (`ORDER BY
+    kanban_rank LIMIT n OFFSET m` on the `(status, kanban_rank)` index), so the board never
+    holds more than columns x page cards whatever the dataset.
+  - Counts in lane and column headers come from the full list.
+- Flat boards with more than 400 cards in the window use TaskBoard's own `virtualize`
+  (card contents drawn only for the visible part of each column). It is not used with
+  swimlanes: its height estimate is taken while lanes are collapsed and expanded lanes come
+  out a few pixels tall. TaskBoard's column toolbars are off: one widget per column per
+  lane made a 26-lane board twice as slow to open.
+- Measured (headless Chromium, 1,556 tasks, 20 columns): flat board first cards in about
+  1s with 1.1s of main-thread work; grouped board (26 lanes, first lane open) 1.7s. The
+  remaining fixed cost is TaskBoard creating a column element per lane per column.
 - Cards are two rows of static HTML; `useDomTransition` is off; the initial task list is
   loaded once (the wrapper skips the duplicate load React effects would otherwise cause).
 - Beyond this, the scalable answer is per-column paging: load the top N cards of each

@@ -42,6 +42,10 @@ export type CardSize = "large" | "medium" | "small";
  * instead, since they carry almost nothing else.
  */
 export function cardTitle(task: BoardTask, size: CardSize = "large"): string {
+  if (task.taskId === 0) {
+    const more = (task as BoardTask & { moreCount?: number }).moreCount || 0;
+    return `<div class="pk-more"><span class="pk-more__label">${enc(task.name)}</span><span class="pk-more__hint">${more} not shown</span></div>`;
+  }
   return `<div class="pk-card-title pk-card-title--${size}" title="${enc(task.name)}">
     <span class="pk-card-title__text">${enc(task.name)}</span>
     ${task.escalated ? `<span class="pk-flag pk-flag--escalated" title="Escalated">${ICON_FLAME}</span>` : ""}
@@ -55,6 +59,7 @@ export function cardTitle(task: BoardTask, size: CardSize = "large"): string {
  *   small   id, priority, one avatar
  */
 export function cardMeta(task: BoardTask, opts: { showProject?: boolean; size?: CardSize } = {}): string {
+  if (task.taskId === 0) return "";
   const size = opts.size || "large";
   const prio = PRIORITY[task.priority];
   const maxAvatars = size === "large" ? 3 : size === "medium" ? 2 : 1;

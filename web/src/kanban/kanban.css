@@ -186,3 +186,11 @@
    (the single implicit lane of an ungrouped board still fills it). */
 .pk-board-host .pk-board--lanes .b-task-board-swimlane { flex: 0 0 auto !important; }
 .pk-board-host .b-task-board-swimlane .b-task-board-column-body { min-height: 3.2em; }
+
+/* ---- "Show more" card at the end of a paged column (a card record, see lanes.ts) ---- */
+.pk-board-host .b-task-board-card.pk-card--more { cursor: pointer; background: #fff; border: 1px dashed var(--pk-line-strong); box-shadow: none; }
+.pk-board-host .b-task-board-card.pk-card--more:hover { border-color: var(--pp-primary, #4f46e5); background: #f7f6ff; }
+.pk-board-host .b-task-board-card.pk-card--more .b-task-board-card-body { display: none; }
+.pk-board-host .b-task-board-card.pk-card--more .b-task-board-card-header { padding: 0.6em 0.8em; }
+.pk-more { display: flex; align-items: baseline; justify-content: center; gap: 0.6em; font-weight: 700; color: var(--pp-primary, #4f46e5); }
+.pk-more__hint { font-weight: 400; font-size: 0.85em; color: var(--pk-muted); }
