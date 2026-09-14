@@ -14,7 +14,26 @@
  *
  * Verified against @bryntum/taskboard 7.3.6 (types in node_modules/@bryntum/taskboard/taskboard.d.ts).
  */
+import { Tooltip } from "@bryntum/taskboard";
 import type { ColumnModel, TaskBoard, TaskBoardConfig, TaskModel, TaskStore } from "@bryntum/taskboard";
+
+/**
+ * Bryntum's shared tooltip pops up the full text of any overflowing element it finds while
+ * walking up from the hovered node (its `filterTarget`), which is a second hover on every
+ * truncated card title. `Tooltip.showOverflow = false` does not hold (the library resets
+ * it during lazy initialisation), so the shared instance's target filter is replaced with
+ * one that only honours explicit `data-btip` targets. The delayed hover preview is then
+ * the only hover on a card. Verified against @bryntum/taskboard 7.3.6.
+ */
+let overflowTipDisabled = false;
+function disableOverflowTooltip() {
+  if (overflowTipDisabled) return;
+  overflowTipDisabled = true;
+  const shared = Tooltip.tooltip as unknown as { forSelector?: string; filterTarget?: (e: { target: Element }) => Element | null };
+  if (!shared) return;
+  const selector = shared.forSelector || "[data-btip]";
+  shared.filterTarget = ({ target }) => target.closest(selector);
+}
 import { cardMeta, cardPreview, cardTitle, statusPill } from "./card";
 import { rankBetween } from "./rank";
 import { UNASSIGNED_LANE, type BoardColumn, type BoardLane, type BoardTask, type GroupBy } from "./model";
@@ -260,6 +279,7 @@ export function attachLaneSource(board: TaskBoard, config: Partial<TaskBoardConf
   void config;
   const src = pendingSources.get(config);
   if (src) { src.attach(board); pendingSources.delete(config); }
+  disableOverflowTooltip();
 }
 const pendingSources = new WeakMap<object, LaneSource>();
 

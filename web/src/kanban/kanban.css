@@ -130,7 +130,7 @@
 .pk-board-host .b-task-board-template { display: block; width: 100%; }
 
 .pk-card-title { display: flex; align-items: flex-start; gap: 0.5em; font-weight: 700; font-size: 1em; line-height: 1.35; color: var(--pk-ink); }
-/* One line: the full title is on hover (native tooltip) and in the preview. */
+/* One line; the full title is in the delayed preview (Bryntum's overflow tooltip is off, see board.config.ts). */
 .pk-card-title__text { flex: 1 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* Small cards have room for little else, so the title wraps to two lines. */
 .pk-card-title--small { font-size: 0.9em; line-height: 1.3; }
