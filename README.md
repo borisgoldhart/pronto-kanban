@@ -21,7 +21,7 @@ stored in Redis.
 
 | Folder | Purpose | Reuse |
 |---|---|---|
-| `web/src/kanban/` | The board: Bryntum config (`board.config.ts`), card templates (`card.ts`), data model + swimlane mapping (`model.ts`), React lifecycle wrapper (`KanbanBoard.tsx`), Pronto theme over Stockholm (`kanban.css`) | Lift as a unit. Swap `KanbanBoard.tsx` for `@bryntum/taskboard-react-thin` if preferred |
+| `web/src/kanban/` | The board: Bryntum config (`board.config.ts`), card templates (`card.ts`), data model + swimlane mapping (`model.ts`), lane-lazy loading (`lanes.ts`), React lifecycle wrapper (`KanbanBoard.tsx`), Pronto theme over Stockholm (`kanban.css`) | Lift as a unit. Swap `KanbanBoard.tsx` for `@bryntum/taskboard-react-thin` if preferred |
 | `server/rank/rank.js` | Rank maths: seed, midpoint, rebalance. Pure functions, unit tested (`npm test`) | Port to PHP for the Pronto API |
 | `server/rank/store.js` | Prototype store for ranks / status overrides / prefs | Replaced by a `kanban_rank` column on the task table |
 | `server/routes/kanban.js` | `POST /api/kanban/move`, `/rebalance`, prefs | The API contract for the front end |
@@ -48,6 +48,7 @@ changes are needed. The trial shows a watermark.
 | BR-11 quick search over the active dataset | client-side `matchesSearch` |
 | BR-12 compact cards, zoom, hover preview | zoom = card size levels large / medium / small, each a different card template via TaskBoard `cardSizes` + `tasksPerRow` (the pattern of Bryntum's zooming demo, not CSS scaling): `board.config.ts` (`ZOOM_LEVELS`), `card.ts` (`cardTitle`/`cardMeta` per size, `cardPreview`) |
 | BR-06 grouped boards open with only the first swimlane expanded; Expand all / Collapse all in the strip | `TaskWorkspace.tsx` (`collapsedLanes`), `board.config.ts` (`setAllLanesCollapsed`) |
+| Performance on grouped boards: only expanded lanes hold cards (lane-lazy loading); header counts from the full list | `web/src/kanban/lanes.ts` (`LaneSource`), wired in `board.config.ts` |
 | BR-13 parent / subtask marker | `isParent`, `parentId` chips |
 | BR-15 live updates | Pusher channel `private-kanban` (`server/realtime.js`, `web/src/realtime.ts`); periodic refresh stands in for Pronto-originated changes (BR-14) |
 
@@ -102,8 +103,26 @@ field is set to the rank, so Bryntum's ordering and the persisted order never di
   ordered by the workflow order in `server/statuses.js`. Completed / Cancelled / Deleted /
   Parent are hidden by default; the Columns menu in the control strip changes that, saved
   per user per board. Column headers carry no menu or collapse control.
-- Board height is fixed (`--pk-board-height`, 1200px) whatever the screen size; the page
-  scrolls to the board and the board scrolls inside.
+- Board height follows the window: the board ends just above the bottom of the browser so
+  its horizontal scrollbar is always in view (`useFitToViewport` in `TaskWorkspace.tsx`).
+
+## Performance with large lists
+
+- Guardrails (BR-10) keep a Task Explorer board at `KANBAN_SAFE_THRESHOLD` tasks (default
+  300) unless the user filters or asks for everything.
+- Grouped boards are lane-lazy (`lanes.ts`): only the expanded swimlanes have cards in
+  TaskBoard's store and in the DOM. A board with 3,000 tasks in 40 lanes renders only the
+  open lane. Counts in lane and column headers come from the full list. When a lane opens,
+  its cards are added, taking status / rank / assignees from any sibling card of the same
+  task already on the board.
+- Flat boards above 400 cards use TaskBoard's own `virtualize` (cards rendered only for the
+  visible part of each column). It is not used with swimlanes: its height estimate is taken
+  while lanes are collapsed and expanded lanes come out a few pixels tall.
+- Cards are two rows of static HTML; `useDomTransition` is off; the initial task list is
+  loaded once (the wrapper skips the duplicate load React effects would otherwise cause).
+- Beyond this, the scalable answer is per-column paging: load the top N cards of each
+  column by rank (index `(status, kanban_rank)`) with "show more" at the bottom of a column,
+  so the board never holds more than columns x N cards regardless of dataset size.
 - Fixtures: `server/fixtures/*.json` are compact captures from Beta (explorer sample and
   project 1530) used when `KANBAN_FIXTURES=1` or there is no Pronto session.
 

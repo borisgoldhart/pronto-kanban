@@ -111,7 +111,12 @@
 /* Bryntum puts the column colour in --b-primary on the header (b-colorize); it paints the top edge. */
 .pk-board-host .b-task-board-column-header::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 4px; background: var(--b-primary, var(--pk-line-strong)); }
 .pk-board-host .b-task-board-column-title { min-width: 0; font-weight: 700; }
-.pk-board-host .b-task-board-column-count { border-radius: 999px; padding: 0.2em 0.7em; font-weight: 700; font-size: 0.9em; }
+.pk-board-host .b-task-board-column-count,
+.pk-board-host .pk-col-count { border-radius: 999px; padding: 0.2em 0.7em; font-weight: 700; font-size: 0.9em; background: var(--b-task-board-column-count-background); color: var(--b-task-board-column-count-color); }
+/* Lazy (grouped) boards: the count next to the pill is the full count; Bryntum's store count is hidden. */
+.pk-board-host .pk-board--lazy .b-task-board-column-count { display: none; }
+.pk-board-host .pk-col-count { margin-left: auto; }
+.pk-board-host .pk-board--lazy .b-task-board-column-title { display: flex; align-items: center; gap: 0.6em; flex: 1 1 auto; }
 .pk-board-host .b-task-board-column-header .b-task-board-column-header-menu-button,
 .pk-board-host .b-task-board-column-header .b-task-board-column-expander { display: none; }
 .pk-board-host .b-task-board-column-header.b-colorize { background: #fff; color: var(--pk-ink); }

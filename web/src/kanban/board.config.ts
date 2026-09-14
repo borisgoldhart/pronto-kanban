@@ -18,6 +18,7 @@ import type { ColumnModel, TaskBoard, TaskBoardConfig, TaskModel, TaskStore } fr
 import { cardMeta, cardPreview, cardTitle, statusPill } from "./card";
 import { rankBetween } from "./rank";
 import { UNASSIGNED_LANE, type BoardColumn, type BoardLane, type BoardTask, type GroupBy } from "./model";
+import { LaneSource, setCountInDomConfig } from "./lanes";
 
 export type MoveRequest = { taskId: number; fromStatus: string; statusId: string; prevRank: number | null; nextRank: number | null };
 export type MoveResponse = { rank: number; rebalance: boolean };
@@ -113,16 +114,25 @@ export function buildBoardConfig(el: HTMLElement, opts: BoardOptions): Partial<T
   // the new column and lane by the time taskDrop fires).
   const dragOrigin = new WeakMap<object, { status: string; lane: string }>();
 
+  // Grouped boards load lazily: only expanded lanes have cards in the store (see lanes.ts).
+  const lazy = useLanes;
+  const laneSource = lazy ? new LaneSource(opts.tasks, opts.lanes.map((l) => l.id).filter((id) => !opts.collapsedLanes?.has(id))) : null;
+  const initialTasks = laneSource ? laneSource.visible() : opts.tasks;
+
   const config: Partial<TaskBoardConfig> = {
     appendTo: el,
-    cls: useLanes ? "pk-board pk-board--lanes" : "pk-board",
+    cls: useLanes ? "pk-board pk-board--lanes pk-board--lazy" : "pk-board",
     columnField: "status",
     swimlaneField: useLanes ? "lane" : undefined,
     // Column headers: the status pill and count only (no collapse chevron, no menu).
     columns: opts.columns.map((c) => ({ id: c.id, text: c.text, color: c.color, hidden: c.hidden, width: opts.columnWidth ?? zoom.columnWidth, minWidth: 220, htmlEncodeHeaderText: false, collapsible: false })),
     swimlanes: useLanes ? opts.lanes.map((l) => ({ id: l.id, text: l.text, collapsible: true, collapsed: opts.collapsedLanes?.has(l.id) ?? false })) : undefined,
-    columnTitleRenderer: ({ columnRecord }) => statusPill(columnRecord.text, String(columnRecord.color || "#999")),
+    // Header counts come from the full task list, not from what is loaded (lazy lanes render
+    // their own column count next to the pill; Bryntum's store-based one is hidden by CSS).
+    columnTitleRenderer: ({ columnRecord }) => statusPill(columnRecord.text, String(columnRecord.color || "#999"))
+      + (laneSource ? `<span class="pk-col-count" data-col="${String(columnRecord.id)}">${laneSource.columnCount(String(columnRecord.id))}</span>` : ""),
     showCountInHeader: true,
+    ...(laneSource ? { swimlaneRenderer: ({ swimlaneRecord, swimlaneConfig }: { swimlaneRecord: { id: string | number }; swimlaneConfig: unknown }) => { setCountInDomConfig(swimlaneConfig, "b-task-board-swimlane-count", `(${laneSource.laneCount(String(swimlaneRecord.id))})`); } } : {}),
     showCollapseInHeader: true,        // swimlanes only: columns are not collapsible and their header icons are hidden
     stickyHeaders: true,
     tasksPerRow: zoom.tasksPerRow,
@@ -131,7 +141,7 @@ export function buildBoardConfig(el: HTMLElement, opts: BoardOptions): Partial<T
     virtualize: !useLanes && opts.tasks.length > 400,   // virtualised column bodies mis-size expanded swimlanes; lanes stay unvirtualised
     useDomTransition: false,
     project: {
-      taskStore: { fields: TASK_FIELDS, data: opts.tasks.map(toTaskData) },
+      taskStore: { fields: TASK_FIELDS, data: initialTasks.map(toTaskData) },
     },
     // Card: two rows only. Default items (text, description, avatars) are switched off.
     headerItems: { text: { type: "template", template: ({ taskRecord }) => cardTitle(asTask(taskRecord), "large") } },
@@ -161,6 +171,8 @@ export function buildBoardConfig(el: HTMLElement, opts: BoardOptions): Partial<T
       columnHeaderMenu: false,
     },
     listeners: {
+      swimlaneExpand: ({ source, swimlaneRecord }) => laneSource?.expand(source as TaskBoard, String(swimlaneRecord.id)),
+      swimlaneCollapse: ({ source, swimlaneRecord }) => laneSource?.collapse(source as TaskBoard, String(swimlaneRecord.id)),
       taskDragStart: ({ taskRecords }) => { for (const r of taskRecords) { const t = asTask(r); dragOrigin.set(r, { status: String(t.status), lane: String(t.lane) }); } },
       // Vertical moves: only User lanes have a business meaning (reassignment).
       beforeTaskDrop: ({ taskRecords, targetSwimlane }) => {
@@ -217,13 +229,35 @@ export function buildBoardConfig(el: HTMLElement, opts: BoardOptions): Partial<T
       taskDblClick: ({ taskRecord }) => callbacks.onOpen(asTask(taskRecord)),
     },
   };
+  if (laneSource) pendingSources.set(config, laneSource);
   return config;
 }
 
-/** Expand or collapse every swimlane in place. */
+/** Called by the wrapper once the board exists, so lanes.ts can find the source for it. */
+export function attachLaneSource(board: TaskBoard, config: Partial<TaskBoardConfig>) {
+  void config;
+  const src = pendingSources.get(config);
+  if (src) { src.attach(board); pendingSources.delete(config); }
+}
+const pendingSources = new WeakMap<object, LaneSource>();
+
+/** Expand or collapse every swimlane in place (loading or dropping their cards when lanes are lazy). */
 export function setAllLanesCollapsed(board: TaskBoard, collapsed: boolean) {
-  const lanes = board.swimlanes as unknown as { forEach: (fn: (r: { collapsed: boolean }) => void) => void } | undefined;
-  lanes?.forEach((r) => { if (r.collapsed !== collapsed) r.collapsed = collapsed; });
+  const lanes = board.swimlanes as unknown as { forEach: (fn: (r: { id: string | number; collapsed: boolean }) => void) => void } | undefined;
+  const src = LaneSource.of(board);
+  lanes?.forEach((r) => {
+    if (src) { if (collapsed) src.collapse(board, String(r.id)); else src.expand(board, String(r.id)); }
+    if (r.collapsed !== collapsed) r.collapsed = collapsed;
+  });
+}
+
+/** Push a new task list into the board (lazy lanes keep only the expanded lanes loaded). */
+export function setBoardTasks(board: TaskBoard, tasks: BoardTask[]) {
+  const src = LaneSource.of(board);
+  if (src) {
+    src.setTasks(board, tasks);
+    for (const el of board.element.querySelectorAll<HTMLElement>(".pk-col-count[data-col]")) el.textContent = String(src.columnCount(el.dataset.col || ""));
+  } else taskStoreOf(board).data = tasks.map(toTaskData);
 }
 
 /** Apply a change that arrived from another user (realtime) to every card of a task. */

@@ -13,7 +13,7 @@
  */
 import { useEffect, useLayoutEffect, useRef, type MutableRefObject } from "react";
 import { TaskBoard, type ColumnModel, type TaskModel } from "@bryntum/taskboard";
-import { buildBoardConfig, setAllLanesCollapsed, taskStoreOf, toTaskData, zoomLevel, type BoardCallbacks } from "./board.config";
+import { attachLaneSource, buildBoardConfig, setAllLanesCollapsed, setBoardTasks, zoomLevel, type BoardCallbacks } from "./board.config";
 import type { BoardColumn, BoardLane, BoardTask, GroupBy } from "./model";
 import "./kanban.css";
 
@@ -42,7 +42,7 @@ export function KanbanBoard({ tasks, columns, lanes, groupBy, groupKey, zoom, sh
   useLayoutEffect(() => {
     const el = hostRef.current;
     if (!el) return;
-    const board = new TaskBoard(buildBoardConfig(el, {
+    const config = buildBoardConfig(el, {
       tasks, columns, lanes, groupBy, showProjectOnCards, zoom, collapsedLanes,
       callbacks: {
         onMove: (r) => callbacksRef.current.onMove(r),
@@ -50,18 +50,23 @@ export function KanbanBoard({ tasks, columns, lanes, groupBy, groupKey, zoom, sh
         onReassign: (r) => callbacksRef.current.onReassign ? callbacksRef.current.onReassign(r) : Promise.resolve(),
         onOpen: (t) => callbacksRef.current.onOpen(t),
       },
-    }));
+    });
+    const board = new TaskBoard(config);
+    attachLaneSource(board, config);
     localRef.current = board;
+    loadedRef.current = tasks;
     if (boardRef) boardRef.current = board;
     return () => { board.destroy(); localRef.current = null; if (boardRef) boardRef.current = null; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [groupKey, showProjectOnCards]);
 
-  // Tasks
+  // Tasks (the create effect already loaded the first list; skip that duplicate render)
+  const loadedRef = useRef<BoardTask[] | null>(null);
   useEffect(() => {
     const board = localRef.current;
-    if (!board) return;
-    taskStoreOf(board).data = tasks.map(toTaskData);
+    if (!board || loadedRef.current === tasks) return;
+    loadedRef.current = tasks;
+    setBoardTasks(board, tasks);
   }, [tasks, groupKey]);
 
   // Columns: visibility applied in place

@@ -35,7 +35,7 @@ const router = Router();
 
 const USE_FIXTURES = process.env.KANBAN_FIXTURES === "1";
 const MAX_TASKS = Number(process.env.KANBAN_MAX_TASKS) || 1500;
-const SAFE_THRESHOLD = Number(process.env.KANBAN_SAFE_THRESHOLD) || (USE_FIXTURES ? 60 : 400);
+const SAFE_THRESHOLD = Number(process.env.KANBAN_SAFE_THRESHOLD) || (USE_FIXTURES ? 60 : 300);
 const RECENCY_DAYS = Number(process.env.KANBAN_RECENCY_DAYS) || 30;
 
 function loadFixture(name) {
