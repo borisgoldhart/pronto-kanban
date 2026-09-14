@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { seedRank, rankBetween, rebalance, NO_DUE_BASE, effectiveRank } from "./rank.js";
+import { seedRank, rankBetween, rebalance, NO_DUE_BASE, effectiveRank, TIER_SPAN } from "./rank.js";
 
 test("due-dated tasks seed ascending by due date, ids break ties", () => {
   const a = seedRank({ id: 10, endDate: "2026-09-01 00:00:00" });
@@ -40,6 +40,15 @@ test("rebalance spaces evenly and keeps order", () => {
   for (let i = 1; i < out.length; i++) assert.ok(out[i] > out[i - 1]);
   assert.equal(out[0], 1);
   assert.equal(out[out.length - 1], 50);
+});
+
+test("priority forms the outer block: P1 before P2 before P3 before unset", () => {
+  const p1 = seedRank({ id: 5, priority: 1 });
+  const p2 = seedRank({ id: 5, endDate: "2020-01-01", priority: 2 });
+  const p3 = seedRank({ id: 5, endDate: "2020-01-01", priority: 3 });
+  const none = seedRank({ id: 5, endDate: "2020-01-01", priority: 0 });
+  assert.ok(p1 < p2 && p2 < p3 && p3 < none);
+  assert.ok(none < 4 * TIER_SPAN);
 });
 
 test("effectiveRank prefers the stored value", () => {

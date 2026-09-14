@@ -85,6 +85,7 @@ export function normaliseTicket(t) {
     jobTitle: job.jobtitle || "",
     brand: job.brand?.title || "",
     client: job.client?.company || "",
+    clientId: job.client?.clientid != null ? Number(job.client.clientid) : null,
     assignees: (t.assignee_users || []).map((u) => ({ id: Number(u.userid), name: u.name, avatar: u.avatarUrl || null })),
     tags: (t.tags_for_ticket || []).map((g) => String(g.name || "").trim()).filter(Boolean),
     startDate: t.startdateticket ? String(t.startdateticket).slice(0, 10) : null,
@@ -104,7 +105,7 @@ export function fromFixtureRow(r) {
   return normaliseTicket({
     id: r[0], title: r[1],
     ticket_status: { statusid: r[2], name: r[3], hexcolor: r[4] },
-    job: { jobid: r[5], jobtitle: r[6], brand: { title: r[7] }, client: { company: r[8] } },
+    job: { jobid: r[5], jobtitle: r[6], brand: { title: r[7] }, client: { company: r[8], clientid: r[8] === "Pronto Australia HQ" ? 1 : null } },
     assignee_users: (r[9] || []).map((u) => ({ userid: u[0], name: u[1], avatarUrl: u[2] })),
     tags_for_ticket: (r[10] || []).map((name) => ({ name })),
     startdateticket: r[11], enddateticket: r[12], priority_new: r[13], is_escalated: !!r[14], is_starred: !!r[15],

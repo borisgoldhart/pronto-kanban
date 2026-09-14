@@ -16,6 +16,8 @@ import { kvEnabled, kvBackend } from "./kv.js";
 import authRoutes from "./routes/auth.js";
 import tasksRoutes from "./routes/tasks.js";
 import kanbanRoutes from "./routes/kanban.js";
+import realtimeRoutes from "./routes/realtime.js";
+import { realtimeEnabled } from "./realtime.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const webDist = path.resolve(__dirname, "..", "web", "dist");
@@ -37,6 +39,7 @@ if (process.env.KANBAN_FIXTURES === "1") {
 app.use("/api/auth", authRoutes);
 app.use("/api/tasks", tasksRoutes);
 app.use("/api/kanban", kanbanRoutes);
+app.use("/api/realtime", realtimeRoutes);
 
 app.get("/api/health", (_req, res) => {
   res.json({
@@ -45,6 +48,8 @@ app.get("/api/health", (_req, res) => {
     kv: { enabled: kvEnabled, backend: kvBackend },
     fixtures: process.env.KANBAN_FIXTURES === "1",
     writeStatus: process.env.KANBAN_WRITE_STATUS === "1",
+    realtime: realtimeEnabled,
+    guardrails: { threshold: Number(process.env.KANBAN_SAFE_THRESHOLD) || null, recencyDays: Number(process.env.KANBAN_RECENCY_DAYS) || 30 },
     region: process.env.VERCEL_REGION || null,
   });
 });

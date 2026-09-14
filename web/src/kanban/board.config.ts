@@ -2,24 +2,34 @@
  * Bryntum TaskBoard configuration for the Pronto Kanban.
  *
  * Everything Bryntum-specific about the board is here: fields, columns, swimlanes,
- * card items, features and drag handling. KanbanBoard.tsx only owns the lifecycle
- * (create / update / destroy) and hands changes to the caller.
+ * card items, hover preview, features and drag handling. KanbanBoard.tsx only owns the
+ * lifecycle (create / update / destroy) and hands changes to the caller.
+ *
+ * Movement rules (BRD BR-07 / C-03):
+ *   - horizontal drag between status columns changes the status (any grouping);
+ *   - vertical drag between User lanes reassigns the task (from -> to);
+ *   - vertical drag between Department or Project lanes is refused.
+ * A task shown in several lanes is several card records sharing a taskId; a change is
+ * applied to every card that carries the taskId.
  *
  * Verified against @bryntum/taskboard 7.3.6 (types in node_modules/@bryntum/taskboard/taskboard.d.ts).
  */
 import type { ColumnModel, TaskBoard, TaskBoardConfig, TaskModel, TaskStore } from "@bryntum/taskboard";
-import { cardMeta, cardTitle, statusPill } from "./card";
+import { cardMeta, cardPreview, cardTitle, statusPill } from "./card";
 import { rankBetween } from "./rank";
-import type { BoardColumn, BoardLane, BoardTask } from "./model";
+import { UNASSIGNED_LANE, type BoardColumn, type BoardLane, type BoardTask, type GroupBy } from "./model";
 
-export type MoveRequest = { taskId: number; fromStatus: string; statusId: string; prevRank: number | null; nextRank: number | null; task: BoardTask };
+export type MoveRequest = { taskId: number; fromStatus: string; statusId: string; prevRank: number | null; nextRank: number | null };
 export type MoveResponse = { rank: number; rebalance: boolean };
+export type ReassignRequest = { taskId: number; fromUserId: number | null; toUserId: number | null; toUserName: string; assignees: BoardTask["assignees"] };
 
 export type BoardCallbacks = {
   /** Persist one drop. Return the authoritative rank. */
   onMove: (req: MoveRequest) => Promise<MoveResponse>;
   /** Re-space a column neighbourhood when a gap is exhausted. */
   onRebalance?: (ranks: { id: number; rank: number }[]) => Promise<{ id: number; rank: number }[]>;
+  /** A card was dragged between User lanes: persist the new assignee list. */
+  onReassign?: (req: ReassignRequest) => Promise<void>;
   /** Open the task (double-click, menu). */
   onOpen: (task: BoardTask) => void;
   /** The user hid a column from its header menu. */
@@ -30,6 +40,7 @@ export type BoardOptions = {
   tasks: BoardTask[];
   columns: BoardColumn[];
   lanes: BoardLane[];          // empty = no swimlanes
+  groupBy: GroupBy;
   showProjectOnCards: boolean;
   columnWidth?: number;
   callbacks: BoardCallbacks;
@@ -37,8 +48,8 @@ export type BoardOptions = {
 
 /** The custom fields a card reads, declared so `record.<field>` works and changes track. */
 export const TASK_FIELDS = [
-  "rank", "lane", "jobId", "jobTitle", "jobCode", "brand", "client", "assignees", "tags",
-  "priority", "escalated", "starred", "endDate", "seeded", "statusOverridden",
+  "taskId", "rank", "lane", "jobId", "jobTitle", "jobCode", "brand", "client", "assignees", "departments", "tags",
+  "priority", "escalated", "starred", "startDate", "endDate", "isParent", "parentId", "activity", "seeded", "statusOverridden",
 ];
 
 export function toTaskData(t: BoardTask): Record<string, unknown> {
@@ -47,32 +58,37 @@ export function toTaskData(t: BoardTask): Record<string, unknown> {
 
 const asTask = (r: TaskModel) => r as unknown as BoardTask & TaskModel;
 
-/** Plain snapshot of a record's fields (record properties are prototype getters, so a spread would miss them). */
-const snapshot = (r: TaskModel): BoardTask => { const t = r as unknown as BoardTask & TaskModel; return { ...((r as unknown as { data: BoardTask }).data), id: Number(r.id), status: String(t.status), weight: t.weight, rank: t.rank }; };
-
 /** The live task store (typed loosely in the config union). */
 export const taskStoreOf = (board: TaskBoard) => board.project.taskStore as TaskStore;
 
-/** Tasks in one column (and lane), in display order. */
+/** Every card record for a task (one per lane it appears in). */
+export function cardsOf(board: TaskBoard, taskId: number): (BoardTask & TaskModel)[] {
+  const out: (BoardTask & TaskModel)[] = [];
+  taskStoreOf(board).forEach((r) => { const t = asTask(r as TaskModel); if (t.taskId === taskId) out.push(t); });
+  return out;
+}
+
+/** Cards in one column (and lane), in display order. */
 export function columnTasks(board: TaskBoard, column: ColumnModel, lane: string | null): (BoardTask & TaskModel)[] {
   const status = String(column.id);
-  const store = taskStoreOf(board);
   const rows: (BoardTask & TaskModel)[] = [];
-  store.forEach((r) => {
+  taskStoreOf(board).forEach((r) => {
     const t = asTask(r as TaskModel);
     if (String(t.status) === status && (lane === null || t.lane === lane)) rows.push(t);
   });
-  rows.sort((a, b) => (a.weight - b.weight) || (Number(a.id) - Number(b.id)));
+  rows.sort((a, b) => (a.weight - b.weight) || (a.taskId - b.taskId));
   return rows;
 }
 
 export function buildBoardConfig(el: HTMLElement, opts: BoardOptions): Partial<TaskBoardConfig> {
-  const { callbacks } = opts;
+  const { callbacks, groupBy } = opts;
   const useLanes = opts.lanes.length > 0;
+  const laneName = new Map(opts.lanes.map((l) => [l.id, l.text]));
+  const columnById = new Map(opts.columns.map((c) => [c.id, c]));
 
-  // Status of each card when its drag started (TaskBoard has already applied the new
-  // column by the time taskDrop fires).
-  const dragOrigin = new WeakMap<object, string>();
+  // Status and lane of each card when its drag started (TaskBoard has already applied
+  // the new column and lane by the time taskDrop fires).
+  const dragOrigin = new WeakMap<object, { status: string; lane: string }>();
 
   const config: Partial<TaskBoardConfig> = {
     appendTo: el,
@@ -101,9 +117,15 @@ export function buildBoardConfig(el: HTMLElement, opts: BoardOptions): Partial<T
       taskDrag: true,
       taskEdit: false,
       simpleTaskEdit: false,
-      taskTooltip: false,
       columnToolbars: false,
       columnLock: false,
+      // Hover preview (BR-12): the lightweight inspection step before Task Detail.
+      taskTooltip: {
+        template: ({ taskRecord, columnRecord }) => {
+          const col = columnById.get(String(columnRecord?.id)) || { text: String(columnRecord?.text || ""), color: String(columnRecord?.color || "#999") };
+          return cardPreview(asTask(taskRecord), col.text, col.color);
+        },
+      },
       taskMenu: {
         items: {
           editTask: false, removeTask: false, resources: false, column: false, swimlane: false,
@@ -118,19 +140,37 @@ export function buildBoardConfig(el: HTMLElement, opts: BoardOptions): Partial<T
       },
     },
     listeners: {
-      // Swimlanes describe an attribute of the task (project, assignee...) that a drag
-      // must not change, so a drop is only valid inside the card's own lane.
+      taskDragStart: ({ taskRecords }) => { for (const r of taskRecords) { const t = asTask(r); dragOrigin.set(r, { status: String(t.status), lane: String(t.lane) }); } },
+      // Vertical moves: only User lanes have a business meaning (reassignment).
       beforeTaskDrop: ({ taskRecords, targetSwimlane }) => {
         if (!targetSwimlane) return true;
+        if (groupBy === "user") return true;
         return taskRecords.every((r) => asTask(r).lane === String(targetSwimlane.id));
       },
-      taskDragStart: ({ taskRecords }) => { for (const r of taskRecords) dragOrigin.set(r, String(asTask(r).status)); },
       taskDrop: async ({ source, taskRecords, targetColumn, targetSwimlane }) => {
         const board = source as TaskBoard;
         const lane = targetSwimlane ? String(targetSwimlane.id) : null;
         for (const record of taskRecords) {
           const task = asTask(record);
-          const fromStatus = dragOrigin.get(record) ?? String(task.status);
+          const origin = dragOrigin.get(record) ?? { status: String(task.status), lane: String(task.lane) };
+          const targetStatus = String(targetColumn.id);
+
+          // 1. Reassignment when the card crossed User lanes.
+          if (groupBy === "user" && lane !== null && lane !== origin.lane && callbacks.onReassign) {
+            const fromUserId = origin.lane === UNASSIGNED_LANE ? null : Number(origin.lane);
+            const toUserId = lane === UNASSIGNED_LANE ? null : Number(lane);
+            const current = task.assignees.filter((a) => a.id !== fromUserId);
+            if (toUserId && !current.some((a) => a.id === toUserId)) current.push({ id: toUserId, name: laneName.get(lane) || `User ${toUserId}`, avatar: null, avatarUrl: null });
+            // If the task already had a card in the target lane, this card is a duplicate.
+            const twin = cardsOf(board, task.taskId).find((c) => c !== task && c.lane === lane);
+            for (const c of cardsOf(board, task.taskId)) c.set({ assignees: current });
+            if (twin) taskStoreOf(board).remove(record);
+            try { await callbacks.onReassign({ taskId: task.taskId, fromUserId, toUserId, toUserName: laneName.get(lane) || "", assignees: current }); }
+            catch (e) { console.error("[kanban] reassign failed", e); }
+            if (twin) continue;   // the surviving twin keeps its rank and status
+          }
+
+          // 2. Rank (and status) for the drop position.
           const rows = columnTasks(board, targetColumn, lane);
           const idx = rows.findIndex((r) => r.id === task.id);
           const prev = idx > 0 ? rows[idx - 1] : null;
@@ -138,15 +178,15 @@ export function buildBoardConfig(el: HTMLElement, opts: BoardOptions): Partial<T
           const prevRank = prev ? prev.rank : null;
           const nextRank = next ? next.rank : null;
           const optimistic = rankBetween(prevRank, nextRank);
-          record.set({ rank: optimistic.rank, weight: optimistic.rank });
-          for (const r of rows) if (r.id !== task.id && r.weight !== r.rank) r.set({ weight: r.rank });
+          for (const c of cardsOf(board, task.taskId)) c.set({ rank: optimistic.rank, weight: optimistic.rank, status: targetStatus });
+          for (const r of rows) if (r.taskId !== task.taskId && r.weight !== r.rank) r.set({ weight: r.rank });
           try {
-            const res = await callbacks.onMove({ taskId: Number(record.id), fromStatus, statusId: String(targetColumn.id), prevRank, nextRank, task: snapshot(record) });
-            record.set({ rank: res.rank, weight: res.rank, seeded: false });
+            const res = await callbacks.onMove({ taskId: task.taskId, fromStatus: origin.status, statusId: targetStatus, prevRank, nextRank });
+            for (const c of cardsOf(board, task.taskId)) c.set({ rank: res.rank, weight: res.rank, seeded: false });
             if (res.rebalance && callbacks.onRebalance) {
-              const ordered = columnTasks(board, targetColumn, lane).map((r) => ({ id: Number(r.id), rank: r.rank }));
+              const ordered = columnTasks(board, targetColumn, lane).map((r) => ({ id: r.taskId, rank: r.rank }));
               const fresh = await callbacks.onRebalance(ordered);
-              for (const f of fresh) { const r = taskStoreOf(board).getById(f.id) as TaskModel | undefined; r?.set({ rank: f.rank, weight: f.rank }); }
+              for (const f of fresh) for (const c of cardsOf(board, f.id)) c.set({ rank: f.rank, weight: f.rank });
             }
           } catch (e) {
             console.error("[kanban] move failed", e);
@@ -157,4 +197,14 @@ export function buildBoardConfig(el: HTMLElement, opts: BoardOptions): Partial<T
     },
   };
   return config;
+}
+
+/** Apply a change that arrived from another user (realtime) to every card of a task. */
+export function applyRemoteChange(board: TaskBoard, taskId: number, patch: { rank?: number; status?: string }) {
+  for (const c of cardsOf(board, taskId)) {
+    const p: Record<string, unknown> = {};
+    if (typeof patch.rank === "number") { p.rank = patch.rank; p.weight = patch.rank; p.seeded = false; }
+    if (patch.status) p.status = patch.status;
+    c.set(p);
+  }
 }

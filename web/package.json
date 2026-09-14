@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@bryntum/taskboard": "npm:@bryntum/taskboard-trial@7.3.6",
+    "pusher-js": "^8.4.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0"
   },

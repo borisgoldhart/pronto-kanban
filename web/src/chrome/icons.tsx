@@ -58,3 +58,12 @@ export const IconArrowRight = ({ size = 14, ...p }: P) => (
 export const IconRefresh = ({ size = 14, ...p }: P) => (
   <svg {...base(size, p)} fill="none"><path d="M13 8A5 5 0 1 1 11.5 4.5M11.5 1.5v3h-3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
 );
+export const IconLink = ({ size = 14, ...p }: P) => (
+  <svg {...base(size, p)} fill="none"><path d="M6.5 9.5a3 3 0 0 0 4.2 0l2-2a3 3 0 0 0-4.2-4.2l-1 1M9.5 6.5a3 3 0 0 0-4.2 0l-2 2a3 3 0 0 0 4.2 4.2l1-1" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" /></svg>
+);
+export const IconLive = ({ size = 8, ...p }: P) => (
+  <svg {...base(size, p)}><circle cx="8" cy="8" r="6" /></svg>
+);
+export const IconSave = ({ size = 14, ...p }: P) => (
+  <svg {...base(size, p)} fill="none"><path d="M3 2.5h8l2.5 2.5v8.5h-11v-11Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" /><path d="M5 2.5v3.5h5V2.5M5 13v-4h6v4" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" /></svg>
+);

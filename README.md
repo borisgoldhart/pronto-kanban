@@ -4,7 +4,7 @@ A working prototype of the Pronto Kanban built on **Bryntum TaskBoard**, driven 
 tasks from the Pronto tasks API. Two views:
 
 - **Task Explorer Kanban** (`/inbox/task-explorer`): every task the user can see, with
-  swimlanes (Project, Assignee, Brand, Office), the system presets and saved filters in
+  swimlanes (User, Department, Project), the system presets and saved views in
   the left nav, and the Task Explorer filter flyout.
 - **Project Kanban** (`/projects/:id/kanban`): one project's tasks.
 
@@ -34,6 +34,22 @@ Pronto's Bryntum licence yet. When it is, change the alias in `web/package.json`
 licensed package (or the thin package next to the others in `pulse-bryntum`); no import
 changes are needed. The trial shows a watermark.
 
+## BRD coverage (v0.1, 10 Sep 2026)
+
+| BRD | Where |
+|---|---|
+| BR-02 shared ranking, BR-03 seed Priority > Due Date > Created | `server/rank/rank.js` (id stands in for created date, which the tickets payload lacks) |
+| BR-04 status by drag, BR-05 visible columns remembered | `board.config.ts`, prefs API |
+| BR-06 grouping None / User / Department / Project | `model.ts` (`laneKeys`); departments from the users API |
+| BR-07 movement rules: User lanes reassign, Department/Project lanes block vertical drag | `board.config.ts` (`beforeTaskDrop`, `taskDrop`) |
+| AC-07.3 / C-02 one task in several lanes | one card record per lane sharing `taskId` |
+| BR-08/09 saved, shareable views restoring filters, columns, grouping | `/api/kanban/views`, `?view=<id>` |
+| BR-10 guardrails: office default, recency window, cap, notice | `routes/tasks.js` (`applyGuardrails`), notice in `TaskWorkspace.tsx` |
+| BR-11 quick search over the active dataset | client-side `matchesSearch` |
+| BR-12 compact cards, zoom, hover preview | `card.ts` (`cardPreview`), TaskTooltip feature |
+| BR-13 parent / subtask marker | `isParent`, `parentId` chips |
+| BR-15 live updates | Pusher channel `private-kanban` (`server/realtime.js`, `web/src/realtime.ts`); periodic refresh stands in for Pronto-originated changes (BR-14) |
+
 ## Ordering: one global rank per task
 
 From the "Spike: Global Task Order" on the Kanban Enhancements project (#73546):
@@ -41,9 +57,9 @@ From the "Spike: Global Task Order" on the Kanban Enhancements project (#73546):
 1. Every task has **one rank**, independent of status and of which board shows it.
    Columns sort by rank; filtering never re-ranks anything.
 2. The rank is **seeded** from data the task already has, so 200,000 existing tasks
-   need no backfill: due date (soonest first), otherwise a "no due date" block, newest
-   first. The task id is folded in as a tie-breaker, so two tasks due the same day never
-   collide.
+   need no backfill: Priority (P1, P2, P3, then unset) as the outer block, then due date
+   (soonest first), otherwise a "no due date" block, newest first. The task id is folded
+   in as a tie-breaker, so two tasks due the same day never collide.
 3. A drag and drop writes **one value**: the moved task's rank becomes the midpoint of
    its new neighbours. Moving to another column also writes the status. Nothing else in
    the column is touched.
@@ -55,7 +71,9 @@ End state in Pronto: `kanban_rank DOUBLE NULL` on the task table, index `(status
 kanban_rank)`; NULL means "use the seed", computable in SQL:
 
 ```sql
-COALESCE(kanban_rank, IF(enddate IS NULL, 1e10 + (1e8 - id), UNIX_TIMESTAMP(enddate) + id / 1e6))
+COALESCE(kanban_rank,
+  (CASE priority_new WHEN 1 THEN 0 WHEN 2 THEN 1 WHEN 3 THEN 2 ELSE 3 END) * 1e11
+  + IF(enddate IS NULL, 1e10 + (1e8 - id), UNIX_TIMESTAMP(enddate) + id / 1e4))
 ```
 
 Redis is a cache in front of that, never the source of truth. TaskBoard's own `weight`
@@ -96,7 +114,8 @@ npm test                        # rank unit tests
 2. Storage: add **Upstash Redis** from the Marketplace (sessions, ranks, prefs). Set
    `KV_PREFIX=kanban:` if it shares the SOW Planner's database.
 3. Environment variables: `PRONTO_BASE_URL`, `PRONTO_ENVIRONMENTS`, `KANBAN_FIXTURES=0`,
-   `KANBAN_WRITE_STATUS=0`, `KANBAN_MAX_TASKS` (default 3000 per query).
+   `KANBAN_WRITE_STATUS=0`, `KANBAN_SAFE_THRESHOLD` / `KANBAN_RECENCY_DAYS` (guardrails),
+   `KANBAN_MAX_TASKS` (default 1500 per query), and the `PUSHER_*` set for live updates.
 
 ## Layout
 
@@ -108,6 +127,8 @@ server/{config,kv,session,users}.js   auth + sessions, carried over from the SOW
 server/pronto.js            the only file that knows Pronto URL shapes
 server/statuses.js          column catalogue and workflow order
 server/rank/                rank maths, prototype store, tests
+server/directory.js         user office + department lookups (cached)
+server/realtime.js          Pusher-protocol publish + private channel auth
 server/routes/tasks.js      GET /api/tasks (presets, filters, rank merge)
 server/routes/kanban.js     POST /api/kanban/move, /rebalance, prefs, reset
 server/fixtures/            captured Beta data for offline work

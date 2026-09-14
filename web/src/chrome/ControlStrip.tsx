@@ -8,15 +8,15 @@
 import { useState } from "react";
 import type { GroupBy } from "../kanban/model";
 import type { StatusInfo } from "../api";
-import { IconCheck, IconChevronDown, IconColumns, IconEllipsis, IconExport, IconFilter, IconKanban, IconList, IconRefresh, IconZoomIn, IconZoomOut } from "./icons";
+import { IconCheck, IconChevronDown, IconColumns, IconEllipsis, IconExport, IconFilter, IconKanban, IconList, IconLive, IconRefresh, IconSave, IconZoomIn, IconZoomOut } from "./icons";
 import { Popover } from "./Popover";
 
+/** BRD BR-06: no grouping, User, Department, Project (User Group and Office are out of the MVP). */
 export const GROUP_OPTIONS: { id: GroupBy; label: string }[] = [
   { id: "none", label: "None" },
+  { id: "user", label: "User" },
+  { id: "department", label: "Department" },
   { id: "project", label: "Project" },
-  { id: "assignee", label: "Assignee" },
-  { id: "brand", label: "Brand" },
-  { id: "office", label: "Office" },
 ];
 
 export type ControlStripProps = {
@@ -39,7 +39,9 @@ export type ControlStripProps = {
   onToggleFilters: () => void;
   onResetOrder: () => void;
   onReload: () => void;
+  onSaveView?: () => void;
   source?: string;
+  live?: "off" | "connecting" | "live" | "error";
 };
 
 export const ZOOM_STEPS = [0.75, 0.85, 1, 1.1, 1.2];
@@ -56,6 +58,7 @@ export function ControlStrip(p: ControlStripProps) {
       <div className="pk-strip__title">
         <h2>{p.title}</h2>
         <span className="pk-strip__count">{p.count.toLocaleString()} {p.count === 1 ? "task" : "tasks"}{p.total > p.count ? ` of ${p.total.toLocaleString()}` : ""}</span>
+        {p.live === "live" && <span className="pk-live" title="Live updates connected"><IconLive /> Live</span>}
       </div>
 
       <div className="pk-strip__controls">
@@ -112,11 +115,12 @@ export function ControlStrip(p: ControlStripProps) {
         <div className="pk-control">
           <button type="button" className="pk-iconbtn pk-iconbtn--boxed" onClick={() => toggle("more")} title="More" aria-haspopup="menu" aria-expanded={menu === "more"}><IconEllipsis /></button>
           <Popover open={menu === "more"} onClose={() => setMenu(null)} width={240}>
+            {p.onSaveView && <button type="button" className="pk-menu__item" onClick={() => { p.onSaveView?.(); setMenu(null); }}><IconSave /> Save current view</button>}
             <button type="button" className="pk-menu__item" onClick={() => setMenu(null)}><IconExport /> Export to Excel</button>
             <button type="button" className="pk-menu__item" onClick={() => { p.onReload(); setMenu(null); }}><IconRefresh /> Reload tasks</button>
             <div className="pk-menu__sep" />
             <button type="button" className="pk-menu__item" onClick={() => { p.onResetOrder(); setMenu(null); }}>Reset Kanban order</button>
-            {p.source && <div className="pk-menu__note">Data: {p.source === "pronto" ? "live from Pronto" : "captured Beta fixtures"}</div>}
+            {p.source && <div className="pk-menu__note">Data: {p.source === "pronto" ? "live from Pronto" : "captured Beta fixtures"}<br />Live updates: {p.live === "live" ? "connected" : p.live === "connecting" ? "connecting" : p.live === "error" ? "error" : "off (no relay configured)"}</div>}
           </Popover>
         </div>
       </div>

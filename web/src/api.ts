@@ -25,7 +25,8 @@ export type ProntoTask = {
   jobTitle: string;
   brand: string;
   client: string;
-  assignees: { id: number; name: string; avatar: string | null; avatarUrl: string | null }[];
+  assignees: { id: number; name: string; avatar: string | null; avatarUrl: string | null; departmentId?: number | null; department?: string | null; office?: string | null }[];
+  departments?: { id: number; name: string }[];
   tags: string[];
   startDate: string | null;
   endDate: string | null;
@@ -39,13 +40,31 @@ export type ProntoTask = {
   rank: number;
   seeded: boolean;
   statusOverridden?: boolean;
+  isParent?: boolean;
+  clientId?: number | null;
 };
+
+/** What the Task Explorer guardrails (BRD BR-10) did to this result. */
+export type Narrowed = {
+  applied: boolean;
+  office: { id: number; name: string } | null;
+  recencyDays: number | null;
+  cappedTo: number | null;
+  afterRecency?: number;
+  threshold: number;
+  total: number;
+  shown: number;
+};
+
+export type SavedView = { id: string; name: string; board: string; createdAt: string; state?: ViewState; owner?: string };
+export type ViewState = { preset?: string; q?: string; filters?: Record<string, unknown>; hiddenStatuses?: number[]; groupBy?: string; zoom?: number; narrow?: boolean };
 
 export type StatusInfo = { id: number; name: string; color: string; count: number; hiddenByDefault: boolean };
 
 export type TasksResponse = {
   ok: true; scope: "explorer" | "project"; job: number | null; preset: string; source: "pronto" | "fixtures";
-  total: number; truncated: boolean; count: number; statuses: StatusInfo[]; tasks: ProntoTask[]; me: { id: string; name: string } | null;
+  total: number; truncated: boolean; count: number; statuses: StatusInfo[]; tasks: ProntoTask[]; narrowed: Narrowed;
+  me: { id: string; name: string; office: string | null; officeId: number | null; department: string | null } | null;
 };
 
 export type BoardPrefs = { hiddenStatuses?: number[]; groupBy?: string; zoom?: number };
@@ -70,6 +89,7 @@ export type TaskQuery = {
   job?: number | null;
   preset?: string;
   q?: string;
+  narrow?: boolean;
   filter?: Record<string, string | number | (string | number)[] | undefined>;
 };
 
@@ -79,6 +99,7 @@ export function taskQueryString(query: TaskQuery): string {
   if (query.job) p.set("job", String(query.job));
   if (query.preset) p.set("preset", query.preset);
   if (query.q) p.set("q", query.q);
+  if (query.narrow === false) p.set("narrow", "0");
   for (const [k, v] of Object.entries(query.filter || {})) {
     if (v === undefined || v === "" || (Array.isArray(v) && v.length === 0)) continue;
     if (Array.isArray(v)) for (const item of v) p.append(`filter[${k}][]`, String(item));
@@ -94,10 +115,17 @@ export const api = {
   brokerStart: (baseUrl?: string) => call<{ ok: true; pid: string; loginUrl: string; pollMs: number }>("/api/auth/broker/start", { method: "POST", body: JSON.stringify({ baseUrl }) }),
   brokerPoll: (pid: string) => call<{ ok: true; pending?: boolean; retryAfter?: number }>("/api/auth/broker/poll", { method: "POST", body: JSON.stringify({ pid }) }),
   tasks: (query: TaskQuery) => call<TasksResponse>(`/api/tasks?${taskQueryString(query)}`),
-  move: (body: { taskId: number; status?: { id: number; name: string; color: string } | null; prevRank: number | null; nextRank: number | null }) =>
+  move: (body: { taskId: number; status?: { id: number; name: string; color: string } | null; prevRank: number | null; nextRank: number | null; origin?: string }) =>
     call<MoveResult>("/api/kanban/move", { method: "POST", body: JSON.stringify(body) }),
-  rebalance: (ranks: { id: number; rank: number }[]) => call<{ ok: true; ranks: { id: number; rank: number }[] }>("/api/kanban/rebalance", { method: "POST", body: JSON.stringify({ ranks }) }),
+  rebalance: (ranks: { id: number; rank: number }[], origin?: string) => call<{ ok: true; ranks: { id: number; rank: number }[] }>("/api/kanban/rebalance", { method: "POST", body: JSON.stringify({ ranks, origin }) }),
+  assign: (body: { taskId: number; assignees: { id: number; name: string; avatar: string | null }[]; origin?: string }) =>
+    call<{ ok: true; taskId: number; assignees: { id: number; name: string; avatar: string | null }[] }>("/api/kanban/assign", { method: "POST", body: JSON.stringify(body) }),
+  views: () => call<{ ok: true; views: SavedView[] }>("/api/kanban/views"),
+  view: (id: string) => call<{ ok: true; view: SavedView & { state: ViewState } }>(`/api/kanban/views/${encodeURIComponent(id)}`),
+  saveView: (body: { name: string; board: string; state: ViewState }) => call<{ ok: true; view: SavedView }>("/api/kanban/views", { method: "POST", body: JSON.stringify(body) }),
+  deleteView: (id: string) => call<{ ok: true }>(`/api/kanban/views/${encodeURIComponent(id)}`, { method: "DELETE" }),
+  realtimeConfig: () => call<{ ok: true; enabled: boolean; config: { key: string; cluster: string; wsHost?: string; wsPort?: number; wssPort?: number; forceTLS?: boolean } | null }>("/api/realtime/config"),
   prefs: (board: string) => call<{ ok: true; prefs: BoardPrefs | null }>(`/api/kanban/prefs/${encodeURIComponent(board)}`),
   savePrefs: (board: string, prefs: BoardPrefs) => call<{ ok: true; prefs: BoardPrefs }>(`/api/kanban/prefs/${encodeURIComponent(board)}`, { method: "PUT", body: JSON.stringify(prefs) }),
-  resetOrder: () => call<{ ok: true }>("/api/kanban/reset", { method: "POST" }),
+  resetOrder: (origin?: string) => call<{ ok: true }>("/api/kanban/reset", { method: "POST", body: JSON.stringify({ origin }) }),
 };

@@ -41,6 +41,7 @@ export default function App() {
 
   const prontoBase = status.environment?.baseUrl || status.baseUrl;
   const project = path.match(/^\/projects\/(\d+)\/kanban/);
+  const viewId = new URLSearchParams(window.location.search).get("view");
 
   if (project) {
     const id = Number(project[1]);
@@ -48,8 +49,8 @@ export default function App() {
       <div className="pp-page pk-page">
         <Banner title={id === DEMO_PROJECT.id ? DEMO_PROJECT.title : `Project ${id}`} code={String(id)} />
         <Tabs items={PROJECT_TABS} active="Tasks" />
-        <TaskWorkspace scope="project" job={id} boardKey={`project:${id}`} title="Tasks" prontoBase={prontoBase} defaultGroupBy="none"
-          groupOptions={[{ id: "none", label: "None" }, { id: "assignee", label: "Assignee" }]} />
+        <TaskWorkspace scope="project" job={id} boardKey={`project:${id}`} title="Tasks" prontoBase={prontoBase} defaultGroupBy="none" viewId={viewId}
+          groupOptions={[{ id: "none", label: "None" }, { id: "user", label: "User" }, { id: "department", label: "Department" }]} />
         <DemoSwitch current="project" go={go} />
       </div>
     );
@@ -59,7 +60,7 @@ export default function App() {
     <div className="pp-page pk-page">
       <Banner title="Inbox" />
       <Tabs items={INBOX_TABS} active="Task Explorer" />
-      <TaskWorkspace scope="explorer" boardKey="explorer" title="All Tasks" prontoBase={prontoBase} defaultGroupBy="project" />
+      <TaskWorkspace scope="explorer" boardKey="explorer" title="All Tasks" prontoBase={prontoBase} defaultGroupBy="project" viewId={viewId} />
       <DemoSwitch current="explorer" go={go} />
     </div>
   );
