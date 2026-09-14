@@ -121,7 +121,6 @@ export function AppliedFilters({ chips, onChange, filters }: { chips: AppliedChi
           <button type="button" className="pk-fchip__x" onClick={() => onChange(c.remove(filters))} aria-label={`Remove ${c.label}`}><IconClose size={10} /></button>
         </span>
       ))}
-      <button type="button" className="pk-link pk-applied__clear" onClick={() => onChange({})}>Clear all</button>
     </div>
   );
 }

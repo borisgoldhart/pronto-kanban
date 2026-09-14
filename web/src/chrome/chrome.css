@@ -82,10 +82,10 @@ body { display: flex; flex-direction: column; }
 .pk-seg--lanes .pk-seg__btn span { display: inline; }
 
 /* ---- applied filters: grey chips inside the strip ---- */
-.pk-applied { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; }
-.pk-applied__clear { font-size: 11.5px; margin-left: 2px; }
-.pk-strip__title { flex: 1 1 auto; flex-wrap: wrap; align-items: center; }
+.pk-applied { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 6px; min-width: 0; }
+.pk-strip__title { flex: 0 1 auto; flex-wrap: wrap; align-items: center; gap: 8px; }
 .pk-strip__title h2 { margin-right: 2px; }
+.pk-strip__controls { flex: 1 1 auto; justify-content: flex-end; }
 
 /* (i) info button and popover: count, live state, data source, guardrail state */
 .pk-infobtn { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border: 0; border-radius: 50%; background: transparent; color: var(--pk-muted); cursor: pointer; padding: 0; }

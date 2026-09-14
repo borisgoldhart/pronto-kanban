@@ -3,10 +3,11 @@
  * Kanban controls sit on the same line as the filter and export buttons, the zoom is
  * compact, and the supplementary actions live behind an ellipsis).
  *
- *   ALL TASKS (i) [chip x] [chip x]        [list|kanban]  Group by [Project v] [^v]  [Columns v]  [filter]  [...]
+ *   ALL TASKS (i) [list|kanban] Group by [Project v] [^v]        [chip x] [chip x] [filter] [Columns v] [...]
  *
  * The count, live state and data source sit behind the (i) icon; the applied filters
- * are chips in the strip itself, so nothing sits between the strip and the column headers.
+ * are chips in the strip itself (right-aligned, before the filter button), so nothing
+ * sits between the strip and the column headers.
  */
 import { useState, type ReactNode } from "react";
 import type { GroupBy } from "../kanban/model";
@@ -71,10 +72,6 @@ export function ControlStrip(p: ControlStripProps) {
             </div>
           </Popover>
         </div>
-        {p.chips}
-      </div>
-
-      <div className="pk-strip__controls">
         <div className="pk-seg" role="group" aria-label="View">
           <button type="button" className={`pk-seg__btn ${p.view === "list" ? "is-active" : ""}`} onClick={() => p.onView("list")} title="List"><IconList /></button>
           <button type="button" className={`pk-seg__btn ${p.view === "kanban" ? "is-active" : ""}`} onClick={() => p.onView("kanban")} title="Kanban"><IconKanban /><span>Kanban</span></button>
@@ -99,6 +96,14 @@ export function ControlStrip(p: ControlStripProps) {
           </button>
         )}
 
+      </div>
+
+      <div className="pk-strip__controls">
+        {p.chips}
+        <button type="button" className={`pk-iconbtn pk-iconbtn--boxed ${p.filtersOpen || p.filterCount ? "is-active" : ""}`} onClick={p.onToggleFilters} title="Filters" aria-pressed={p.filtersOpen}>
+          <IconFilter />{p.filterCount > 0 && <span className="pk-badge pk-badge--dot">{p.filterCount}</span>}
+        </button>
+
         <div className="pk-control">
           <button type="button" className="pk-select" onClick={() => toggle("columns")} aria-haspopup="menu" aria-expanded={menu === "columns"} title="Choose which statuses are shown as columns">
             <IconColumns /><span>Columns</span><IconChevronDown />
@@ -120,9 +125,6 @@ export function ControlStrip(p: ControlStripProps) {
           </Popover>
         </div>
 
-        <button type="button" className={`pk-iconbtn pk-iconbtn--boxed ${p.filtersOpen || p.filterCount ? "is-active" : ""}`} onClick={p.onToggleFilters} title="Filters" aria-pressed={p.filtersOpen}>
-          <IconFilter />{p.filterCount > 0 && <span className="pk-badge pk-badge--dot">{p.filterCount}</span>}
-        </button>
 
         <div className="pk-control">
           <button type="button" className="pk-iconbtn pk-iconbtn--boxed" onClick={() => toggle("more")} title="More" aria-haspopup="menu" aria-expanded={menu === "more"}><IconEllipsis /></button>
