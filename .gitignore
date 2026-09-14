@@ -1,0 +1,18 @@
+# Secrets. Real values live in Vercel Environment Variables.
+.env
+.env.*
+!.env.example
+
+# Local runtime state (deployed app uses Redis, see server/kv.js)
+/.cache/
+/data/
+
+# Build output and generated copies
+web/dist/
+web/public/base/
+
+# Tooling
+node_modules/
+.vercel/
+.DS_Store
+*.log

@@ -1,0 +1,125 @@
+/**
+ * The single control strip above the board (Richard's change to the wireframes: the
+ * Kanban controls sit on the same line as the filter and export buttons, the zoom is
+ * compact, and the supplementary actions live behind an ellipsis).
+ *
+ *   ALL TASKS  16 tasks        [list|kanban]  Group by [Project v]  [Columns v]  [- 100% +]  [filter]  [...]
+ */
+import { useState } from "react";
+import type { GroupBy } from "../kanban/model";
+import type { StatusInfo } from "../api";
+import { IconCheck, IconChevronDown, IconColumns, IconEllipsis, IconExport, IconFilter, IconKanban, IconList, IconRefresh, IconZoomIn, IconZoomOut } from "./icons";
+import { Popover } from "./Popover";
+
+export const GROUP_OPTIONS: { id: GroupBy; label: string }[] = [
+  { id: "none", label: "None" },
+  { id: "project", label: "Project" },
+  { id: "assignee", label: "Assignee" },
+  { id: "brand", label: "Brand" },
+  { id: "office", label: "Office" },
+];
+
+export type ControlStripProps = {
+  title: string;
+  count: number;
+  total: number;
+  view: "list" | "kanban";
+  onView: (v: "list" | "kanban") => void;
+  groupBy: GroupBy;
+  onGroupBy: (g: GroupBy) => void;
+  groupOptions?: { id: GroupBy; label: string }[];
+  statuses: StatusInfo[];
+  hidden: Set<number>;
+  onToggleStatus: (id: number) => void;
+  onShowAllStatuses: () => void;
+  zoom: number;
+  onZoom: (z: number) => void;
+  filtersOpen: boolean;
+  filterCount: number;
+  onToggleFilters: () => void;
+  onResetOrder: () => void;
+  onReload: () => void;
+  source?: string;
+};
+
+export const ZOOM_STEPS = [0.75, 0.85, 1, 1.1, 1.2];
+
+export function ControlStrip(p: ControlStripProps) {
+  const [menu, setMenu] = useState<"group" | "columns" | "more" | null>(null);
+  const toggle = (m: typeof menu) => setMenu((cur) => (cur === m ? null : m));
+  const zi = ZOOM_STEPS.indexOf(p.zoom);
+  const groupLabel = (p.groupOptions || GROUP_OPTIONS).find((g) => g.id === p.groupBy)?.label || "None";
+  const hiddenCount = p.statuses.filter((s) => p.hidden.has(s.id)).length;
+
+  return (
+    <div className="pk-strip">
+      <div className="pk-strip__title">
+        <h2>{p.title}</h2>
+        <span className="pk-strip__count">{p.count.toLocaleString()} {p.count === 1 ? "task" : "tasks"}{p.total > p.count ? ` of ${p.total.toLocaleString()}` : ""}</span>
+      </div>
+
+      <div className="pk-strip__controls">
+        <div className="pk-seg" role="group" aria-label="View">
+          <button type="button" className={`pk-seg__btn ${p.view === "list" ? "is-active" : ""}`} onClick={() => p.onView("list")} title="List"><IconList /></button>
+          <button type="button" className={`pk-seg__btn ${p.view === "kanban" ? "is-active" : ""}`} onClick={() => p.onView("kanban")} title="Kanban"><IconKanban /><span>Kanban</span></button>
+        </div>
+
+        <div className="pk-control">
+          <span className="pk-control__label">Group by</span>
+          <button type="button" className="pk-select" onClick={() => toggle("group")} aria-haspopup="menu" aria-expanded={menu === "group"}>
+            <span>{groupLabel}</span><IconChevronDown />
+          </button>
+          <Popover open={menu === "group"} onClose={() => setMenu(null)} width={200}>
+            {(p.groupOptions || GROUP_OPTIONS).map((g) => (
+              <button key={g.id} type="button" className={`pk-menu__item ${g.id === p.groupBy ? "is-active" : ""}`} onClick={() => { p.onGroupBy(g.id); setMenu(null); }}>
+                <span className="pk-menu__check">{g.id === p.groupBy && <IconCheck />}</span>{g.label}
+              </button>
+            ))}
+          </Popover>
+        </div>
+
+        <div className="pk-control">
+          <button type="button" className="pk-select" onClick={() => toggle("columns")} aria-haspopup="menu" aria-expanded={menu === "columns"} title="Choose which statuses are shown as columns">
+            <IconColumns /><span>Columns</span>{hiddenCount > 0 && <span className="pk-badge">{p.statuses.length - hiddenCount}/{p.statuses.length}</span>}<IconChevronDown />
+          </button>
+          <Popover open={menu === "columns"} onClose={() => setMenu(null)} width={280}>
+            <div className="pk-menu__head">Columns <button type="button" className="pk-link" onClick={p.onShowAllStatuses}>Show all</button></div>
+            <div className="pk-menu__scroll">
+              {p.statuses.map((s) => {
+                const on = !p.hidden.has(s.id);
+                return (
+                  <button key={s.id} type="button" className={`pk-menu__item pk-menu__item--status ${on ? "is-on" : ""}`} onClick={() => p.onToggleStatus(s.id)} role="menuitemcheckbox" aria-checked={on}>
+                    <span className={`pk-checkbox ${on ? "is-checked" : ""}`}>{on && <IconCheck />}</span>
+                    <span className="pk-status-pill pk-status-pill--sm" style={{ ["--pk-status" as string]: s.color }}>{s.name}</span>
+                    <span className="pk-menu__count">{s.count}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </Popover>
+        </div>
+
+        <div className="pk-zoom" role="group" aria-label="Zoom">
+          <button type="button" className="pk-iconbtn" onClick={() => p.onZoom(ZOOM_STEPS[Math.max(0, zi - 1)])} disabled={zi <= 0} title="Smaller cards"><IconZoomOut /></button>
+          <span className="pk-zoom__value">{Math.round(p.zoom * 100)}%</span>
+          <button type="button" className="pk-iconbtn" onClick={() => p.onZoom(ZOOM_STEPS[Math.min(ZOOM_STEPS.length - 1, zi + 1)])} disabled={zi >= ZOOM_STEPS.length - 1} title="Larger cards"><IconZoomIn /></button>
+        </div>
+
+        <button type="button" className={`pk-iconbtn pk-iconbtn--boxed ${p.filtersOpen || p.filterCount ? "is-active" : ""}`} onClick={p.onToggleFilters} title="Filters" aria-pressed={p.filtersOpen}>
+          <IconFilter />{p.filterCount > 0 && <span className="pk-badge pk-badge--dot">{p.filterCount}</span>}
+        </button>
+
+        <div className="pk-control">
+          <button type="button" className="pk-iconbtn pk-iconbtn--boxed" onClick={() => toggle("more")} title="More" aria-haspopup="menu" aria-expanded={menu === "more"}><IconEllipsis /></button>
+          <Popover open={menu === "more"} onClose={() => setMenu(null)} width={240}>
+            <button type="button" className="pk-menu__item" onClick={() => setMenu(null)}><IconExport /> Export to Excel</button>
+            <button type="button" className="pk-menu__item" onClick={() => { p.onReload(); setMenu(null); }}><IconRefresh /> Reload tasks</button>
+            <div className="pk-menu__sep" />
+            <button type="button" className="pk-menu__item" onClick={() => { p.onResetOrder(); setMenu(null); }}>Reset Kanban order</button>
+            {p.source && <div className="pk-menu__note">Data: {p.source === "pronto" ? "live from Pronto" : "captured Beta fixtures"}</div>}
+          </Popover>
+        </div>
+      </div>
+    </div>
+  );
+}

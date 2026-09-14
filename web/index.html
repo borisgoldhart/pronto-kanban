@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Pronto Kanban</title>
+  <!-- Pronto Base: shared nav + page template (auto-mounts <pronto-nav>). -->
+  <script>
+    window.ProntoPage = {
+      pageTitle: "Kanban",
+      subtitle: "Inbox",
+      active: "inbox",
+      appRoot: "https://havaspronto.com",
+      homepage: false,
+      banner: false,
+      userMenu: { sections: [{ items: [
+        { label: "My Details", icon: "idCard", href: "https://havaspronto.com/v2/account" },
+        { id: "logout", label: "Logout", icon: "logout",
+          onClick: function () { if (window.prontoLogout) window.prontoLogout(); } }
+      ] }] }
+    };
+  </script>
+  <script src="/base/v1/loader.js" data-banner="off"></script>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="module" src="/src/main.tsx"></script>
+</body>
+</html>

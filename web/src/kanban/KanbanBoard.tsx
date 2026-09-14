@@ -1,0 +1,80 @@
+/**
+ * React wrapper around Bryntum TaskBoard.
+ *
+ * Creates the board once per (groupBy) configuration and pushes prop changes into the
+ * live instance: tasks -> taskStore, columns -> column store (hidden/order), zoom -> a
+ * CSS variable. Recreating on a swimlane change keeps the wrapper simple; every other
+ * change is applied in place.
+ *
+ * Pronto already consumes Bryntum's React wrappers (@bryntum/*-react-thin); this file is
+ * the equivalent of <BryntumTaskBoard> plus the Pronto behaviours, so it can be replaced
+ * by the wrapper when the licensed package is available.
+ */
+import { useEffect, useLayoutEffect, useRef } from "react";
+import { TaskBoard, type ColumnModel, type TaskModel } from "@bryntum/taskboard";
+import { buildBoardConfig, taskStoreOf, toTaskData, type BoardCallbacks } from "./board.config";
+import type { BoardColumn, BoardLane, BoardTask } from "./model";
+import "./kanban.css";
+
+export type KanbanBoardProps = {
+  tasks: BoardTask[];
+  columns: BoardColumn[];
+  lanes: BoardLane[];
+  groupKey: string;               // changes force a rebuild (swimlane field/lanes)
+  zoom: number;                   // 0.7 .. 1.3
+  showProjectOnCards: boolean;
+  callbacks: BoardCallbacks;
+  className?: string;
+};
+
+export function KanbanBoard({ tasks, columns, lanes, groupKey, zoom, showProjectOnCards, callbacks, className }: KanbanBoardProps) {
+  const hostRef = useRef<HTMLDivElement>(null);
+  const boardRef = useRef<TaskBoard | null>(null);
+  const callbacksRef = useRef(callbacks);
+  callbacksRef.current = callbacks;
+
+  // Create / rebuild
+  useLayoutEffect(() => {
+    const el = hostRef.current;
+    if (!el) return;
+    const board = new TaskBoard(buildBoardConfig(el, {
+      tasks, columns, lanes, showProjectOnCards,
+      callbacks: {
+        onMove: (r) => callbacksRef.current.onMove(r),
+        onRebalance: (r) => callbacksRef.current.onRebalance ? callbacksRef.current.onRebalance(r) : Promise.resolve([]),
+        onOpen: (t) => callbacksRef.current.onOpen(t),
+        onHideColumn: (id) => callbacksRef.current.onHideColumn?.(id),
+      },
+    }));
+    boardRef.current = board;
+    return () => { board.destroy(); boardRef.current = null; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [groupKey, showProjectOnCards]);
+
+  // Tasks
+  useEffect(() => {
+    const board = boardRef.current;
+    if (!board) return;
+    taskStoreOf(board).data = tasks.map(toTaskData);
+  }, [tasks, groupKey]);
+
+  // Columns: visibility and order, applied in place
+  useEffect(() => {
+    const board = boardRef.current;
+    if (!board) return;
+    const store = board.columns as unknown as { getById: (id: string) => ColumnModel | undefined; forEach: (fn: (c: ColumnModel) => void) => void };
+    for (const c of columns) {
+      const rec = store.getById(c.id);
+      if (rec && rec.hidden !== c.hidden) rec.hidden = c.hidden;
+    }
+  }, [columns, groupKey]);
+
+  // Zoom: cards and headers are sized in em, so one font-size scales the board
+  useEffect(() => {
+    hostRef.current?.style.setProperty("--pk-zoom", String(zoom));
+  }, [zoom]);
+
+  return <div ref={hostRef} className={`pk-board-host ${className || ""}`} />;
+}
+
+export type { TaskModel };

@@ -1,0 +1,25 @@
+{
+  "name": "pronto-kanban",
+  "version": "0.1.0",
+  "description": "Pronto Kanban prototype: Bryntum TaskBoard over the Pronto tasks API, with a global rank service for drag ordering. Same auth and hosting pattern as the SOW Planner and Asset Library.",
+  "private": true,
+  "type": "module",
+  "main": "server/index.js",
+  "workspaces": ["web"],
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "concurrently -k -n api,web \"node --watch server/index.js\" \"npm run dev --workspace web\"",
+    "build": "node scripts/copy-base.mjs && npm run build --workspace web",
+    "test": "node --test server/rank/rank.test.js"
+  },
+  "dependencies": {
+    "@upstash/redis": "^1.38.0",
+    "dotenv": "^16.6.1",
+    "express": "^4.22.2",
+    "ioredis": "^5.11.1"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}

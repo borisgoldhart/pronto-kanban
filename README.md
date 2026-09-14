@@ -1,0 +1,118 @@
+# Pronto Kanban (prototype)
+
+A working prototype of the Pronto Kanban built on **Bryntum TaskBoard**, driven by real
+tasks from the Pronto tasks API. Two views:
+
+- **Task Explorer Kanban** (`/inbox/task-explorer`): every task the user can see, with
+  swimlanes (Project, Assignee, Brand, Office), the system presets and saved filters in
+  the left nav, and the Task Explorer filter flyout.
+- **Project Kanban** (`/projects/:id/kanban`): one project's tasks.
+
+Cards drag between columns (status) and up and down within a column (order). Order is
+kept by a global per-task **rank** (see below), so a card sits in the same relative
+position on the project board and in Task Explorer.
+
+Same architecture and auth as the SOW Planner and Asset Library: Node/Express backend
+(holds credentials, proxies Pronto), single-page front end, shared `pronto-base` nav,
+per-user sessions ("Sign in with HavasPronto" PKCE broker, email+password, or token)
+stored in Redis.
+
+## What the devs can lift
+
+| Folder | Purpose | Reuse |
+|---|---|---|
+| `web/src/kanban/` | The board: Bryntum config (`board.config.ts`), card templates (`card.ts`), data model + swimlane mapping (`model.ts`), React lifecycle wrapper (`KanbanBoard.tsx`), Pronto theme over Stockholm (`kanban.css`) | Lift as a unit. Swap `KanbanBoard.tsx` for `@bryntum/taskboard-react-thin` if preferred |
+| `server/rank/rank.js` | Rank maths: seed, midpoint, rebalance. Pure functions, unit tested (`npm test`) | Port to PHP for the Pronto API |
+| `server/rank/store.js` | Prototype store for ranks / status overrides / prefs | Replaced by a `kanban_rank` column on the task table |
+| `server/routes/kanban.js` | `POST /api/kanban/move`, `/rebalance`, prefs | The API contract for the front end |
+| `server/pronto.js` | The only file that knows Pronto URL and payload shapes; `normaliseTicket` is the field mapping | Reference for the mapping |
+| `web/src/chrome/` | Page chrome for the demo (banner, tabs, left nav, control strip, filter flyout) | Design reference only; Pronto's own pages supply these |
+
+Bryntum: the prototype uses the public trial (`@bryntum/taskboard` is an npm alias of
+`@bryntum/taskboard-trial@7.3.6`). Pronto runs 6.3.4 thin packages; TaskBoard is not on
+Pronto's Bryntum licence yet. When it is, change the alias in `web/package.json` to the
+licensed package (or the thin package next to the others in `pulse-bryntum`); no import
+changes are needed. The trial shows a watermark.
+
+## Ordering: one global rank per task
+
+From the "Spike: Global Task Order" on the Kanban Enhancements project (#73546):
+
+1. Every task has **one rank**, independent of status and of which board shows it.
+   Columns sort by rank; filtering never re-ranks anything.
+2. The rank is **seeded** from data the task already has, so 200,000 existing tasks
+   need no backfill: due date (soonest first), otherwise a "no due date" block, newest
+   first. The task id is folded in as a tie-breaker, so two tasks due the same day never
+   collide.
+3. A drag and drop writes **one value**: the moved task's rank becomes the midpoint of
+   its new neighbours. Moving to another column also writes the status. Nothing else in
+   the column is touched.
+4. Midpoints halve the gap each time; when a gap is exhausted (`rebalance: true` in the
+   move response) the column neighbourhood is re-spaced in one small batch. With the
+   seed spacing used (seconds) that takes about 40 consecutive drops into the same gap.
+
+End state in Pronto: `kanban_rank DOUBLE NULL` on the task table, index `(status,
+kanban_rank)`; NULL means "use the seed", computable in SQL:
+
+```sql
+COALESCE(kanban_rank, IF(enddate IS NULL, 1e10 + (1e8 - id), UNIX_TIMESTAMP(enddate) + id / 1e6))
+```
+
+Redis is a cache in front of that, never the source of truth. TaskBoard's own `weight`
+field is set to the rank, so Bryntum's ordering and the persisted order never disagree.
+
+## Data
+
+- Tasks: `GET /v2/api/bryntum/tickets` (the Task Explorer query). Unscoped queries need
+  `is_paginate=1`; paging is `page[limit]` + `page[page]`. Filter keys accepted by the
+  API: `search, status, assignees, tags, show_all_tags_only, show_escalated_ticket,
+  reported_by, ticket_type, departments, start_date, end_date, preset, parent_ticket_id,
+  user_groups, priority_new, brands, jobs, clients, brand_categories, products,
+  job_statuses, tasks, show_tasks_starred, show_tasks_stakeholder`.
+- Status change: the legacy `api.v2.php action=tasks&type=update-property` call the
+  current Kanban makes. Off by default (`KANBAN_WRITE_STATUS=0`): the demo keeps the new
+  status as an override so nothing on Beta is mutated.
+- Columns: derived from the statuses present in the loaded tasks (id, name, colour),
+  ordered by the workflow order in `server/statuses.js`. Completed / Cancelled / Deleted /
+  Parent are hidden by default; the Columns menu and per-column menu change that, saved
+  per user per board.
+- Fixtures: `server/fixtures/*.json` are compact captures from Beta (explorer sample and
+  project 1530) used when `KANBAN_FIXTURES=1` or there is no Pronto session.
+
+## Run locally
+
+```bash
+npm install
+cp .env.example .env            # defaults to fixtures + Beta
+npm run dev                     # API on :8791, Vite on :5174 (proxies /api and /base)
+npm test                        # rank unit tests
+```
+
+`npm run build && npm start` serves the built front end from the API process.
+
+## Deploy (Vercel)
+
+1. Import the repo. Build settings come from `vercel.json`.
+2. Storage: add **Upstash Redis** from the Marketplace (sessions, ranks, prefs). Set
+   `KV_PREFIX=kanban:` if it shares the SOW Planner's database.
+3. Environment variables: `PRONTO_BASE_URL`, `PRONTO_ENVIRONMENTS`, `KANBAN_FIXTURES=0`,
+   `KANBAN_WRITE_STATUS=0`, `KANBAN_MAX_TASKS` (default 3000 per query).
+
+## Layout
+
+```
+api/index.js                Vercel entry (exports the Express app)
+server/app.js               Express app: /api/auth, /api/tasks, /api/kanban, /api/health
+server/index.js             long-lived process (local dev, Docker)
+server/{config,kv,session,users}.js   auth + sessions, carried over from the SOW Planner
+server/pronto.js            the only file that knows Pronto URL shapes
+server/statuses.js          column catalogue and workflow order
+server/rank/                rank maths, prototype store, tests
+server/routes/tasks.js      GET /api/tasks (presets, filters, rank merge)
+server/routes/kanban.js     POST /api/kanban/move, /rebalance, prefs, reset
+server/fixtures/            captured Beta data for offline work
+web/src/kanban/             the board (lift this)
+web/src/chrome/             Pronto page chrome for the demo
+web/src/pages/              Task Explorer / Project Kanban workspace
+pronto-base/                shared nav package (copied into web/public/base at build)
+```
