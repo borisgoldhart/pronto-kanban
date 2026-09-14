@@ -13,10 +13,10 @@
 }
 
 /* The page scrolls; the board itself has a fixed height (see .pk-board-area) with its own scrollbars. */
-html, body, #root { min-height: 100%; }
+html, body { min-height: 100%; }
 body { display: flex; flex-direction: column; }
-#root { display: flex; flex-direction: column; }
-.pk-page { display: flex; flex-direction: column; flex: 1 1 auto; padding-top: 18px; padding-bottom: 24px; max-width: none; }
+#root { display: flex; flex-direction: column; }   /* no min-height: the page is as tall as its content */
+.pk-page { display: flex; flex-direction: column; flex: 1 1 auto; padding-top: 18px; padding-bottom: 12px; max-width: none; }
 .pk-loading-page { padding: 48px 40px; color: var(--pk-muted); }
 
 /* ---- banner (Inbox / project) -------------------------------------------- */
@@ -134,8 +134,9 @@ body { display: flex; flex-direction: column; }
 .pk-link:hover { text-decoration: underline; }
 
 /* ---- board area ------------------------------------------------------------ */
-/* Fixed board height regardless of screen size: the page scrolls to it, the board scrolls inside. */
-.pk-board-area { position: relative; display: flex; flex-direction: column; flex: none; height: var(--pk-board-height, 1200px); min-height: 0; padding: 14px 16px 12px; }
+/* The board is sized to end just above the bottom of the browser window (TaskWorkspace sets
+   --pk-board-height from the viewport), so its horizontal scrollbar is always in view. */
+.pk-board-area { position: relative; display: flex; flex-direction: column; flex: none; height: var(--pk-board-height, 800px); min-height: 0; padding: 14px 16px 12px; }
 .pk-board-area.is-loading .pk-board-host { opacity: .55; }
 .pk-loading { position: absolute; top: 18px; left: 50%; transform: translateX(-50%); padding: 6px 14px; border-radius: 999px; background: #fff; border: 1px solid var(--pk-line); font-size: 12.5px; color: var(--pk-muted); box-shadow: 0 4px 12px rgba(0,0,0,.08); }
 .pk-alert { margin: 10px 22px 0; padding: 9px 12px; border-radius: 4px; font-size: 13px; background: #e8f1fb; border: 1px solid #c5dcf3; color: #1b4f7f; }
@@ -179,7 +180,8 @@ body { display: flex; flex-direction: column; }
 .pk-flyout__foot { margin-top: auto; padding: 18px 24px; border-top: 1px solid var(--pk-line); }
 
 /* ---- demo switch (not part of the design) --------------------------------- */
-.pk-demo-switch { flex: none; display: flex; align-items: center; gap: 8px; margin-top: 18px; font-size: 12px; color: var(--pk-muted); }
+/* Prototype-only view switch: floats bottom-left so it takes no page height (the board reaches the window bottom). */
+.pk-demo-switch { position: fixed; left: 16px; bottom: 12px; z-index: 50; display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 999px; background: rgba(255,255,255,.92); box-shadow: 0 2px 10px rgba(16,24,40,.12); font-size: 12px; color: var(--pk-muted); }
 .pk-demo-switch button { border: 1px solid var(--pk-line-strong); background: #fff; border-radius: 999px; padding: 4px 12px; font: inherit; font-size: 12px; cursor: pointer; color: var(--pk-ink); }
 .pk-demo-switch button.is-active { background: var(--pk-ink); color: #fff; border-color: var(--pk-ink); }
 

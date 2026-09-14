@@ -31,6 +31,47 @@ export type TaskWorkspaceProps = {
 
 const REFRESH_MS = 120_000;    // stand-in for Pronto-originated changes (automation, bulk updates)
 
+/**
+ * Board height: from the top of the board area down to just above the bottom of the
+ * window (so the board's horizontal scrollbar stays visible), recomputed on resize and
+ * whenever the content above it (notices, filter chips) changes height.
+ */
+function useFitToViewport(ref: React.RefObject<HTMLElement | null>, bottomGap = 4, min = 420) {
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    let last = 0;
+    const fit = () => {
+      const rect = el.getBoundingClientRect();
+      const top = rect.top + window.scrollY;
+      // Whatever the page lays out below the board (later siblings, card and page padding) stays visible too.
+      let below = 0;
+      for (let a: HTMLElement | null = el; a && a !== document.body; a = a.parentElement) {
+        for (let sib = a.nextElementSibling as HTMLElement | null; sib; sib = sib.nextElementSibling as HTMLElement | null) {
+          const cs = getComputedStyle(sib);
+          if (cs.position === "fixed" || cs.position === "absolute" || cs.display === "none") continue;
+          below += sib.getBoundingClientRect().height + (parseFloat(cs.marginTop) || 0) + (parseFloat(cs.marginBottom) || 0);
+        }
+        const parent = a.parentElement;
+        if (parent && parent !== document.body) {
+          const pcs = getComputedStyle(parent);
+          below += (parseFloat(pcs.paddingBottom) || 0) + (parseFloat(pcs.borderBottomWidth) || 0) + (parseFloat(pcs.marginBottom) || 0);
+        }
+      }
+      const h = Math.round(Math.max(min, window.innerHeight - top - below - bottomGap));
+      if (Math.abs(h - last) < 2) return;
+      last = h;
+      el.style.setProperty("--pk-board-height", `${h}px`);
+    };
+    fit();
+    window.addEventListener("resize", fit);
+    const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(fit) : null;
+    ro?.observe(document.body);
+    if (el.parentElement) ro?.observe(el.parentElement);
+    return () => { window.removeEventListener("resize", fit); ro?.disconnect(); };
+  }, [ref, bottomGap, min]);
+}
+
 function useDebounced<T>(value: T, ms: number): T {
   const [v, setV] = useState(value);
   useEffect(() => { const t = setTimeout(() => setV(value), ms); return () => clearTimeout(t); }, [value, ms]);
@@ -62,6 +103,8 @@ export function TaskWorkspace({ scope, job, boardKey, title, prontoBase, groupOp
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const boardRef = useRef<TaskBoard | null>(null);
+  const areaRef = useRef<HTMLDivElement>(null);
+  useFitToViewport(areaRef);
 
   /* ---- preferences and saved views ------------------------------------------ */
   useEffect(() => {
@@ -250,7 +293,7 @@ export function TaskWorkspace({ scope, job, boardKey, title, prontoBase, groupOp
           <div className="pk-alert" role="status">Guardrails are off: showing up to {meta.truncated ? "the first " : ""}{tasks.length.toLocaleString()} tasks{meta.truncated ? ` of ${meta.total.toLocaleString()}` : ""}. <button type="button" className="pk-link" onClick={() => setNarrow(true)}>Back to the default view</button></div>
         )}
 
-        <div className={`pk-board-area ${loading ? "is-loading" : ""}`}>
+        <div ref={areaRef} className={`pk-board-area ${loading ? "is-loading" : ""}`}>
           {view === "kanban" ? (
             <KanbanBoard tasks={boardTasks} columns={columns} lanes={lanes} groupBy={groupBy} groupKey={groupKey} zoom={zoom} showProjectOnCards={scope === "explorer" && groupBy !== "project"}
               collapsedLanes={collapsedLanes} laneRequest={laneRequest} callbacks={callbacks} boardRef={boardRef} />

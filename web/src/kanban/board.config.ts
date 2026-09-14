@@ -128,7 +128,7 @@ export function buildBoardConfig(el: HTMLElement, opts: BoardOptions): Partial<T
     tasksPerRow: zoom.tasksPerRow,
     cardSizes: CARD_SIZES(opts.showProjectOnCards) as unknown as TaskBoardConfig["cardSizes"],
     stretchCards: true,
-    virtualize: opts.tasks.length > 400,
+    virtualize: !useLanes && opts.tasks.length > 400,   // virtualised column bodies mis-size expanded swimlanes; lanes stay unvirtualised
     useDomTransition: false,
     project: {
       taskStore: { fields: TASK_FIELDS, data: opts.tasks.map(toTaskData) },

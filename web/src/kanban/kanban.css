@@ -104,6 +104,10 @@
   letter-spacing: 0.01em;
 }
 .pk-board-host .b-task-board-column-header { position: relative; border-radius: var(--pk-radius) var(--pk-radius) 0 0; overflow: hidden; }
+/* The header row and the columns below share the swimlane body's horizontal padding, so
+   each header sits exactly on its column; the column's top corners are square under it. */
+.pk-board-host .b-task-board-column-headers { padding-left: 0.75em; padding-right: 0.25em; }
+.pk-board-host .b-task-board-column { border-top-left-radius: 0; border-top-right-radius: 0; }
 /* Bryntum puts the column colour in --b-primary on the header (b-colorize); it paints the top edge. */
 .pk-board-host .b-task-board-column-header::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 4px; background: var(--b-primary, var(--pk-line-strong)); }
 .pk-board-host .b-task-board-column-title { min-width: 0; font-weight: 700; }
@@ -135,7 +139,7 @@
 .pk-card-meta--small { gap: 0.25em; font-size: 0.78em; margin-top: 0.3em; }
 .pk-card-meta--small .pk-chip { padding: 0.1em 0.4em; }
 /* Multi-per-row (inline) cards get a fixed height from Bryntum; ours size to their two rows. */
-.pk-board-host .b-inline .b-task-board-card { height: auto; }
+.pk-board-host .b-task-board-column.b-inline .b-task-board-card { height: auto !important; }
 /* Bryntum's size classes on the column body, for padding per level */
 .pk-board-host .b-medium-cards { --b-task-board-card-header-padding: 0.55em 0.65em 0.2em; --b-task-board-card-body-padding: 0 0.65em 0.55em; }
 .pk-board-host .b-small-cards { --b-task-board-card-header-padding: 0.45em 0.5em 0.15em; --b-task-board-card-body-padding: 0 0.5em 0.45em; }
