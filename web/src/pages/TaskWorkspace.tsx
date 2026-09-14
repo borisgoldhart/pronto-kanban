@@ -11,7 +11,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { TaskBoard } from "@bryntum/taskboard";
 import { api, ApiError, type FilterOptions, type Narrowed, type ProntoTask, type SavedView, type StatusInfo, type TaskQuery, type ViewState } from "../api";
 import { KanbanBoard } from "../kanban/KanbanBoard";
-import { matchesSearch, toBoardTasks, toColumns, toLanes, type BoardTask, type GroupBy } from "../kanban/model";
+import { matchesSearch, pickTopColumns, toBoardTasks, toColumns, toLanes, type BoardTask, type GroupBy } from "../kanban/model";
 import { applyRemoteChange, type BoardCallbacks } from "../kanban/board.config";
 import { ControlStrip, GROUP_OPTIONS } from "../chrome/ControlStrip";
 import { LeftNav } from "../chrome/PageChrome";
@@ -89,11 +89,10 @@ export function TaskWorkspace({ scope, job, boardKey, title, prontoBase, groupOp
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [view, setView] = useState<"list" | "kanban">(fromUrl.state.mode || "kanban");
   const [groupBy, setGroupBy] = useState<GroupBy>(fromUrl.state.groupBy || defaultGroupBy);
-  // Column visibility = defaults (Completed, Cancelled, Deleted, Parent hidden) + the user's explicit
-  // hides and shows. Kept as two override lists so a default-hidden status (Parent) stays hidden
-  // even when it first appears after the preferences were saved.
-  const [hiddenOverride, setHiddenOverride] = useState<Set<number>>(new Set(fromUrl.state.hidden || []));
-  const [shownOverride, setShownOverride] = useState<Set<number>>(new Set(fromUrl.state.shown || []));
+  // Columns: the statuses the user chose for this view, or none (automatic: the five most
+  // populated statuses in the loaded set, leaving out closed, on-hold and Parent). Any change
+  // in the Columns menu or a column header turns the current column set into an explicit choice.
+  const [chosenColumns, setChosenColumns] = useState<number[]>(fromUrl.state.shown || []);
   const [laneRequest, setLaneRequest] = useState<{ collapsed: boolean; seq: number } | null>(null);
   const [lanesOpen, setLanesOpen] = useState(false);                     // grouped boards open collapsed (all but the first lane)
   const toggleLanes = () => { setLaneRequest((r) => ({ collapsed: lanesOpen, seq: (r?.seq || 0) + 1 })); setLanesOpen((v) => !v); };
@@ -123,8 +122,7 @@ export function TaskWorkspace({ scope, job, boardKey, title, prontoBase, groupOp
         const r = await api.prefs(boardKey);
         if (!alive) return;
         if (!fromUrl.has) {
-          if (r.prefs?.hiddenStatuses) setHiddenOverride(new Set(r.prefs.hiddenStatuses));
-          if (r.prefs?.shownStatuses) setShownOverride(new Set(r.prefs.shownStatuses));
+          if (r.prefs?.shownStatuses) setChosenColumns(r.prefs.shownStatuses);
           if (r.prefs?.groupBy && GROUP_OPTIONS.some((g) => g.id === r.prefs?.groupBy)) setGroupBy(r.prefs.groupBy as GroupBy);
         }
       } catch { /* defaults */ }
@@ -144,24 +142,23 @@ export function TaskWorkspace({ scope, job, boardKey, title, prontoBase, groupOp
     if (!prefsLoaded) return;
     if (saveTimer.current) window.clearTimeout(saveTimer.current);
     saveTimer.current = window.setTimeout(() => {
-      api.savePrefs(boardKey, { hiddenStatuses: [...hiddenOverride], shownStatuses: [...shownOverride], groupBy }).catch(() => { /* best effort */ });
+      api.savePrefs(boardKey, { shownStatuses: chosenColumns, groupBy }).catch(() => { /* best effort */ });
     }, 400);
-  }, [hiddenOverride, shownOverride, groupBy, boardKey, prefsLoaded]);
+  }, [chosenColumns, groupBy, boardKey, prefsLoaded]);
 
   useEffect(() => {
     if (!prefsLoaded) return;
-    writeUrlState({ preset, q: search, mode: view, groupBy, hidden: [...hiddenOverride], shown: [...shownOverride], narrow, filters });
-  }, [prefsLoaded, preset, search, view, groupBy, hiddenOverride, shownOverride, narrow, filters]);
+    writeUrlState({ preset, q: search, mode: view, groupBy, shown: chosenColumns, narrow, filters });
+  }, [prefsLoaded, preset, search, view, groupBy, chosenColumns, narrow, filters]);
 
   function currentViewState(): ViewState {
-    return { preset, q: search, filters, hiddenStatuses: [...hiddenOverride], shownStatuses: [...shownOverride], groupBy, mode: view, narrow };
+    return { preset, q: search, filters, shownStatuses: chosenColumns, groupBy, mode: view, narrow };
   }
   function applyView(state: ViewState, id: string | null) {
     if (state.preset) setPreset(state.preset);
     setSearch(state.q || "");
     setFilters(normaliseFilters(state.filters));
-    if (state.hiddenStatuses) setHiddenOverride(new Set(state.hiddenStatuses));
-    if (state.shownStatuses) setShownOverride(new Set(state.shownStatuses));
+    setChosenColumns(state.shownStatuses || []);
     if (state.groupBy && GROUP_OPTIONS.some((g) => g.id === state.groupBy)) setGroupBy(state.groupBy as GroupBy);
     if (state.mode === "list" || state.mode === "kanban") setView(state.mode);
     if (typeof state.narrow === "boolean") setNarrow(state.narrow);
@@ -235,19 +232,12 @@ export function TaskWorkspace({ scope, job, boardKey, title, prontoBase, groupOp
 
   /* ---- board inputs ---------------------------------------------------------- */
   const visibleTasks = useMemo(() => (q ? tasks.filter((t) => matchesSearch(t, q)) : tasks), [tasks, q]);
-  const hiddenSet = useMemo(() => {
-    const set = new Set<number>(statuses.filter((s) => s.hiddenByDefault).map((s) => s.id));
-    for (const id of hiddenOverride) set.add(id);
-    for (const id of shownOverride) set.delete(id);
-    return set;
-  }, [hiddenOverride, shownOverride, statuses]);
-  // Grouped views: a status with no task in the loaded set would be an empty column in
-  // every lane, and TaskBoard's cost grows with lanes x columns, so those columns are
-  // left out (the Columns menu still lists them with a count of 0).
-  const columns = useMemo(() => {
-    const cols = toColumns(statuses, hiddenSet);
-    return groupBy === "none" ? cols : cols.map((c) => (c.count === 0 ? { ...c, hidden: true } : c));
-  }, [statuses, hiddenSet, groupBy]);
+  const autoColumns = chosenColumns.length === 0;
+  const visibleColumnIds = useMemo(() => (autoColumns ? pickTopColumns(statuses) : new Set(chosenColumns)), [autoColumns, chosenColumns, statuses]);
+  const hiddenSet = useMemo(() => new Set(statuses.filter((s) => !visibleColumnIds.has(s.id)).map((s) => s.id)), [statuses, visibleColumnIds]);
+  // A chosen column stays on the board even with no task in it (that is how a user adds a
+  // column to move tasks into); the automatic pick only ever contains populated statuses.
+  const columns = useMemo(() => toColumns(statuses, hiddenSet), [statuses, hiddenSet]);
   const lanes = useMemo(() => toLanes(visibleTasks, groupBy), [visibleTasks, groupBy]);
   const boardTasks = useMemo(() => toBoardTasks(visibleTasks, groupBy), [visibleTasks, groupBy]);
   const groupKey = `${groupBy}|${statuses.map((s) => s.id).join(",")}|${lanes.map((l) => l.id).join(",")}`;
@@ -279,12 +269,15 @@ export function TaskWorkspace({ scope, job, boardKey, title, prontoBase, groupOp
     onHideColumn: (id) => setColumnVisible(Number(id), false),
   }), [statuses, prontoBase]);
 
+  /** Show or hide one column. The first change turns the automatic pick into an explicit list, in catalogue order. */
   function setColumnVisible(id: number, visible: boolean) {
-    setHiddenOverride((cur) => { const next = new Set(cur); if (visible) next.delete(id); else next.add(id); return next; });
-    setShownOverride((cur) => { const next = new Set(cur); if (visible) next.add(id); else next.delete(id); return next; });
+    const next = new Set(visibleColumnIds);
+    if (visible) next.add(id); else next.delete(id);
+    setChosenColumns(statuses.filter((s) => next.has(s.id)).map((s) => s.id));
   }
   const toggleStatus = (id: number) => setColumnVisible(id, hiddenSet.has(id));
-  const showAllStatuses = () => { setHiddenOverride(new Set()); setShownOverride(new Set(statuses.map((s) => s.id))); };
+  const showAllStatuses = () => setChosenColumns(statuses.map((s) => s.id));
+  const autoStatuses = () => setChosenColumns([]);
 
   const resetOrder = async () => {
     if (!window.confirm("Reset the Kanban order for every task back to the seeded order (priority, due date, then newest first)?")) return;
@@ -334,7 +327,7 @@ export function TaskWorkspace({ scope, job, boardKey, title, prontoBase, groupOp
           view={view} onView={setView}
           groupBy={groupBy} onGroupBy={setGroupBy} groupOptions={groupOptions}
           lanesOpen={lanesOpen} onToggleLanes={toggleLanes}
-          statuses={statuses} hidden={hiddenSet} onToggleStatus={toggleStatus} onShowAllStatuses={showAllStatuses}
+          statuses={statuses} hidden={hiddenSet} onToggleStatus={toggleStatus} onShowAllStatuses={showAllStatuses} onAutoStatuses={autoStatuses} autoColumns={autoColumns}
           filtersOpen={filtersOpen} filterCount={countActive(filters)} onToggleFilters={() => setFiltersOpen((v) => !v)}
           onResetOrder={resetOrder} onReload={() => load()} onSaveView={saveCurrentView} source={meta.source} live={live}
           chips={<AppliedFilters chips={chips} filters={effectiveFilters} onChange={changeFilters} />}

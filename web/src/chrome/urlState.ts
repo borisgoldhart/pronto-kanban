@@ -2,7 +2,7 @@
  * The board configuration in the URL, so a copied address reproduces the view
  * (through the viewer's own permissions: the API only returns what they may see).
  *
- *   ?preset=mine&q=survey&mode=kanban&group=user&hide=10,443&show=99&narrow=0
+ *   ?preset=mine&q=survey&mode=kanban&group=user&show=1,2,416,418&narrow=0
  *   &assignees=777,925&pm=1099&offices=1&brands=286&tags=BASep2026&statuses=1,2
  *   &escalated=1&priority=1&reportedBy=777&start=2026-09-01&end=2026-09-30
  *   &parent=48840&type=bug&updatedFrom=2026-08-15&updatedTo=2026-09-14
@@ -10,6 +10,8 @@
  * `view=<id>` (a saved view) is left alone: it is what shareView produces and is read
  * by App.tsx. The state is written with history.replaceState, so it never adds history
  * entries. Everything is optional; defaults are omitted to keep addresses short.
+ * `show` is the user's column choice; without it the board picks the five most populated
+ * columns. (`hide` from older addresses is read but no longer written.)
  */
 import type { Filters } from "./FilterFlyout";
 import type { GroupBy } from "../kanban/model";

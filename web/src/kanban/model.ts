@@ -122,6 +122,21 @@ export function toBoardTasks(tasks: ProntoTask[], groupBy: GroupBy): BoardTask[]
 }
 
 /** Columns from the status catalogue, honouring the user's hidden set (or the defaults). */
+/** How many columns a view shows when the user has not chosen any. */
+export const AUTO_COLUMNS = 5;
+
+/**
+ * The automatic column pick: the AUTO_COLUMNS most populated statuses in the loaded set,
+ * leaving out closed (Completed, Cancelled, Deleted), on-hold and Parent. Ties keep the
+ * catalogue (workflow) order. With nothing loaded, the first candidates in workflow order.
+ */
+export function pickTopColumns(statuses: StatusInfo[], limit = AUTO_COLUMNS): Set<number> {
+  const candidates = statuses.map((s, i) => ({ s, i })).filter(({ s }) => !s.autoExcluded && !s.hiddenByDefault && !s.isParent);
+  const populated = candidates.filter(({ s }) => s.count > 0).sort((a, b) => (b.s.count - a.s.count) || (a.i - b.i));
+  const pick = (populated.length ? populated : candidates).slice(0, limit);
+  return new Set(pick.map(({ s }) => s.id));
+}
+
 export function toColumns(statuses: StatusInfo[], hidden: Set<number> | null): BoardColumn[] {
   return statuses.map((s) => ({
     id: String(s.id),

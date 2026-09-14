@@ -70,9 +70,11 @@ export type Narrowed = {
 
 export type SavedView = { id: string; name: string; board: string; createdAt: string; state?: ViewState; owner?: string };
 /** zoom: no longer used (older saved views may still carry it). */
+/** shownStatuses: the columns the user chose (empty or absent = automatic: the five most populated). hiddenStatuses: no longer used. */
 export type ViewState = { preset?: string; q?: string; filters?: Record<string, unknown>; hiddenStatuses?: number[]; shownStatuses?: number[]; groupBy?: string; mode?: "list" | "kanban"; zoom?: number; narrow?: boolean };
 
-export type StatusInfo = { id: number; name: string; color: string; count: number; hiddenByDefault: boolean; isParent?: boolean };
+/** autoExcluded: closed, on-hold and container statuses, never part of the automatic "top 5 populated" column pick. */
+export type StatusInfo = { id: number; name: string; color: string; count: number; hiddenByDefault: boolean; isParent?: boolean; autoExcluded?: boolean };
 
 export type TasksResponse = {
   ok: true; scope: "explorer" | "project"; job: number | null; preset: string; source: "pronto" | "fixtures";

@@ -39,6 +39,9 @@ export type ControlStripProps = {
   hidden: Set<number>;
   onToggleStatus: (id: number) => void;
   onShowAllStatuses: () => void;
+  /** Back to the automatic pick (the five most populated columns). */
+  onAutoStatuses: () => void;
+  autoColumns: boolean;
   filtersOpen: boolean;
   filterCount: number;
   onToggleFilters: () => void;
@@ -109,7 +112,14 @@ export function ControlStrip(p: ControlStripProps) {
             <IconColumns /><span>Columns</span><IconChevronDown />
           </button>
           <Popover open={menu === "columns"} onClose={() => setMenu(null)} width={280}>
-            <div className="pk-menu__head">Columns <button type="button" className="pk-link" onClick={p.onShowAllStatuses}>Show all</button></div>
+            <div className="pk-menu__head">
+              Columns
+              <span className="pk-menu__actions">
+                <button type="button" className={`pk-link ${p.autoColumns ? "is-current" : ""}`} onClick={p.onAutoStatuses} title="The five most populated statuses in this view">Top 5</button>
+                <button type="button" className="pk-link" onClick={p.onShowAllStatuses}>Show all</button>
+              </span>
+            </div>
+            {p.autoColumns && <div className="pk-menu__hint">Showing the five most populated statuses. Tick any status to choose your own columns, including empty ones.</div>}
             <div className="pk-menu__scroll">
               {p.statuses.map((s) => {
                 const on = !p.hidden.has(s.id);

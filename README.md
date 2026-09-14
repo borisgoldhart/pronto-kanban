@@ -112,12 +112,23 @@ field is set to the rank, so Bryntum's ordering and the persisted order never di
 - Filter pick-lists: `GET /api/tasks/options` derives assignees, project managers,
   offices, brands, tags and statuses from the tasks the user can see. Pronto's own lookup
   endpoints replace this in the product.
-- Columns: derived from the statuses present in the loaded tasks (id, name, colour),
-  ordered by the workflow order in `server/statuses.js`. Completed / Cancelled / Deleted /
-  Parent are hidden by default; the Columns menu (and the column header menu) change
-  that, saved per user per board as explicit hide / show overrides on top of the defaults,
-  so a default-hidden status stays hidden even when it first appears later. The Parent
-  status is a container: nothing can be dropped into its column.
+- Status list: Pronto's JSON API has no task-status resource (`/v2/api/statuses` is the
+  batch-job status table; nothing under `tickets/` or `tasks/` lists them). Beta renders
+  the list into its Task Explorer page as `pulse.request.formOptions.statuses`
+  (`id, title, hex_colour`), so `server/fixtures/statuses.json` is a snapshot of that
+  list (60 statuses, 14 Sep 2026). `server/statuses.js` merges the statuses seen on the
+  loaded tasks on top of it, so a status added later still appears once a task has it.
+  Replace the snapshot with the real endpoint when Pronto exposes one.
+- Columns: every status in the catalogue is offered in the Columns menu (with its count
+  in the loaded set, 0 included) and in the status filter. With no choice made, the board
+  shows the five most populated statuses of the current view, leaving out Completed,
+  Cancelled, Deleted, "Don't Use", On hold / Started - On Hold and Parent (ties keep the
+  workflow order; `pickTopColumns` in `web/src/kanban/model.ts`). The first change in the
+  Columns menu or a column header turns that pick into an explicit list, saved per user
+  per board (`shownStatuses`), in the URL (`show=`) and in saved views; "Top 5" in the
+  menu goes back to the automatic pick. A chosen column stays on the board even with no
+  task in it, so tasks can be moved into it. The Parent status is a container: nothing
+  can be dropped into its column.
 - Column width: 300px when five columns fit the board; otherwise the columns shrink (to
   180px at least) so five fit, and below 266px the cards switch to the medium template
   (`cardSizes`): `fitColumns` in `board.config.ts`, applied on resize by `KanbanBoard.tsx`.
@@ -153,8 +164,8 @@ field is set to the rank, so Bryntum's ordering and the persisted order never di
   `setWaterMark`, which builds a data-URL SVG background per cell (plus `btoa`, `URL`,
   `queryString`). Its cost grows faster than the cell count (1,120 cells: 5s). The licensed
   package has no watermark, so this cost disappears with the licence; until then keep
-  grouped views to the columns in use. Grouped views also leave out statuses with no task
-  in the loaded set (empty in every lane), which halves the cells on a typical board.
+  grouped views to the columns in use. The automatic column pick (five most populated
+  statuses) keeps the cell count low on grouped boards; chosen columns are shown as chosen.
 - Live updates (Pusher) are not a factor: the client only listens, and the two-minute
   refresh now compares a fingerprint of the response and touches nothing when the board
   is unchanged.

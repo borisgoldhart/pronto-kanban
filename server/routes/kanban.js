@@ -92,7 +92,7 @@ router.put("/prefs/:board", async (req, res) => {
   const body = req.body || {};
   const prefs = {
     hiddenStatuses: Array.isArray(body.hiddenStatuses) ? body.hiddenStatuses.map(Number) : undefined,
-    shownStatuses: Array.isArray(body.shownStatuses) ? body.shownStatuses.map(Number) : undefined,   // default-hidden statuses the user chose to show
+    shownStatuses: Array.isArray(body.shownStatuses) ? body.shownStatuses.map(Number) : undefined,   // the columns the user chose; empty = automatic (top five populated)
     groupBy: typeof body.groupBy === "string" ? body.groupBy : undefined,
     zoom: typeof body.zoom === "number" ? body.zoom : undefined,
   };

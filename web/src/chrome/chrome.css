@@ -152,6 +152,9 @@ body { display: flex; flex-direction: column; }
 .pk-status-pill--sm { font-size: 11px; padding: 2px 8px; font-weight: 600; display: inline-flex; align-items: center; border-radius: 999px; background: var(--pk-status, #999); color: #fff; font-weight: 700; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
 .pk-link { border: 0; background: transparent; padding: 0; font: inherit; font-size: 12px; font-weight: 700; color: var(--pk-primary); cursor: pointer; text-transform: none; letter-spacing: 0; }
 .pk-link:hover { text-decoration: underline; }
+.pk-link.is-current { color: #666; cursor: default; text-decoration: none; }
+.pk-menu__actions { display: inline-flex; gap: 12px; }
+.pk-menu__hint { padding: 4px 12px 8px; font-size: 11px; line-height: 1.4; color: #666; border-bottom: 1px solid var(--pk-line); margin-bottom: 4px; }
 
 /* ---- board area ------------------------------------------------------------ */
 /* The board is sized to end just above the bottom of the browser window (TaskWorkspace sets
