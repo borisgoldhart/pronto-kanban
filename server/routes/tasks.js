@@ -214,13 +214,21 @@ router.get("/", async (req, res) => {
   const explorerDefault = guard && me?.clientId;
 
   let tasks, source, total, truncated = false;
+  let fullTotal = null;   // the size of the set before any office narrowing (explorer default only)
   if (auth && !USE_FIXTURES) {
     const apiFilter = { ...presetFilter(preset, identity), ...filter };
     // Pronto validates priority_new as a single value, not a list.
     if (Array.isArray(apiFilter.priority_new)) apiFilter.priority_new = apiFilter.priority_new[0];
     if (scope === "project") apiFilter.jobs = [job];
     if (!apiFilter.status) apiFilter.status = ["incomplete"];      // the Task Explorer default
-    if (explorerDefault) { apiFilter.clients = [me.clientId]; narrowed.office = { id: me.clientId, name: me.client }; }
+    if (explorerDefault) {
+      // Only narrow to the person's office when the full set really is over the limit: one
+      // one-row request gives the true total, which the toast then reports ("147 of 1,240").
+      const probe = await fetchTickets(auth, { filter: apiFilter, max: 1, limit: 1 });
+      if (!probe.ok) return res.status(probe.status || 502).json({ ok: false, error: probe.error, authRequired: Boolean(probe.authRequired) });
+      fullTotal = probe.total;
+      if (fullTotal > SAFE_THRESHOLD) { apiFilter.clients = [me.clientId]; narrowed.office = { id: me.clientId, name: me.client }; }
+    }
     const r = await fetchTickets(auth, { filter: apiFilter, max: MAX_TASKS });
     if (!r.ok) return res.status(r.status || 502).json({ ok: false, error: r.error, authRequired: Boolean(r.authRequired) });
     tasks = r.rows; total = r.total; truncated = r.truncated; source = "pronto";
@@ -241,7 +249,7 @@ router.get("/", async (req, res) => {
     total = tasks.length; truncated = false;
   }
 
-  if (guard) tasks = applyGuardrails(tasks, total, narrowed);
+  if (guard) tasks = applyGuardrails(tasks, fullTotal ?? total, narrowed);
   else { narrowed.total = total; narrowed.shown = tasks.length; narrowed.threshold = SAFE_THRESHOLD; narrowed.applied = false; }
 
   // Overrides (rank, demo status, reassignments), departments, parent markers.
