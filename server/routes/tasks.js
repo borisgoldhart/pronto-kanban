@@ -27,7 +27,7 @@ import { fetchTickets, fromFixtureRow, avatarUrl } from "../pronto.js";
 import { allOverrides } from "../rank/store.js";
 import { effectiveRank } from "../rank/rank.js";
 import { statusCatalogue } from "../statuses.js";
-import { getUser, getUsers } from "../directory.js";
+import { getUser, getUsers, getJobs } from "../directory.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const FIXTURES = path.resolve(__dirname, "..", "fixtures");
@@ -78,7 +78,29 @@ function filterFixtureRows(rows, { preset, filter, identity }) {
   if (filter.priority_new?.length) { const p = filter.priority_new.map(Number); out = out.filter((t) => p.includes(t.priority)); }
   if (filter.jobs?.length) { const j = filter.jobs.map(Number); out = out.filter((t) => j.includes(t.jobId)); }
   if (filter.clients?.length) { const c = filter.clients.map(String); out = out.filter((t) => c.includes(String(t.clientId)) || c.includes(t.client)); }
+  if (filter.brands?.length) { const b = filter.brands.map(String); out = out.filter((t) => b.includes(String(t.brandId)) || b.includes(t.brand)); }
+  if (filter.reported_by?.length) { /* fixtures carry no reporter; leave as is */ }
   return out;
+}
+
+/** Keys that mean the user has narrowed the query themselves (BR-10 guardrails then step aside). */
+const USER_FILTER_KEYS = ["search", "assignees", "pm", "tags", "show_escalated_ticket", "reported_by", "ticket_type", "departments", "start_date", "end_date", "parent_ticket_id", "priority_new", "brands", "jobs", "clients", "products", "show_tasks_starred", "show_tasks_stakeholder"];
+function userHasFiltered(preset, filter) {
+  if (preset && preset !== "all") return true;
+  if (Array.isArray(filter.status) && filter.status.some((s) => /^\d+$/.test(String(s)))) return true;
+  return USER_FILTER_KEYS.some((k) => { const v = filter[k]; return v !== undefined && v !== "" && !(Array.isArray(v) && v.length === 0); });
+}
+
+/** Jobs: project code (extension), project manager, brand and office ids. */
+async function enrichFromJobs(auth, tasks) {
+  const jobs = await getJobs(auth, tasks.map((t) => t.jobId).filter(Boolean));
+  for (const t of tasks) {
+    const j = t.jobId ? jobs.get(t.jobId) : null;
+    t.jobExtension = j?.extension || null;
+    t.projectManagerId = j?.projectManagerId ?? null;
+    if (j && t.brandId == null) t.brandId = j.brandId;
+    if (j && t.clientId == null) t.clientId = j.clientId;
+  }
 }
 
 const activityMs = (t) => (t.activity ? Date.parse(String(t.activity).replace(" ", "T")) : 0);
@@ -104,6 +126,39 @@ function applyGuardrails(tasks, total, narrowed) {
   return out;
 }
 
+/**
+ * GET /api/tasks/options: pick-lists for the filter flyout (assignees, project managers,
+ * offices, brands, tags, statuses) derived from the tasks the user can see. Pronto has
+ * dedicated lookup endpoints for these; the prototype derives them from a broad query so
+ * the lists always match the data on the board.
+ */
+router.get("/options", async (req, res) => {
+  const identity = req.pronto?.identity || null;
+  const auth = req.pronto?.auth || null;
+  let rows;
+  if (auth && !USE_FIXTURES) {
+    const r = await fetchTickets(auth, { filter: { status: ["incomplete"] }, max: MAX_TASKS });
+    if (!r.ok) return res.status(r.status || 502).json({ ok: false, error: r.error, authRequired: Boolean(r.authRequired) });
+    rows = r.rows;
+  } else {
+    rows = [...loadFixture("explorer-sample.json"), ...loadFixture("project-1530.json")];
+  }
+  await enrichFromJobs(auth, rows);
+  const uniq = (pairs) => [...new Map(pairs.filter(([id]) => id != null && id !== "").map(([id, name]) => [String(id), { id, name }])).values()].sort((a, b) => String(a.name).localeCompare(String(b.name)));
+  const pmIds = [...new Set(rows.map((t) => t.projectManagerId).filter(Boolean))];
+  const pms = await getUsers(auth, pmIds);
+  res.json({
+    ok: true,
+    me: identity ? { id: identity.id, name: identity.name } : null,
+    assignees: uniq(rows.flatMap((t) => t.assignees.map((a) => [a.id, a.name]))),
+    projectManagers: uniq(pmIds.map((id) => [id, pms.get(id)?.name || `User ${id}`])),
+    offices: uniq(rows.map((t) => [t.clientId, t.client])),
+    brands: uniq(rows.map((t) => [t.brandId, t.brand])),
+    tags: uniq(rows.flatMap((t) => t.tags.map((g) => [g, g]))),
+    statuses: statusCatalogue(rows).map((s) => ({ id: s.id, name: s.name, color: s.color })),
+  });
+});
+
 router.get("/", async (req, res) => {
   const scope = req.query.scope === "project" ? "project" : "explorer";
   const job = req.query.job ? Number(req.query.job) : null;
@@ -118,7 +173,11 @@ router.get("/", async (req, res) => {
   // Who is asking: office for the default Task Explorer constraint (BR-10 / AC-10.1).
   const me = identity?.id ? await getUser(auth, identity.id) : null;
   const narrowed = { office: null, recencyDays: null, cappedTo: null };
-  const explorerDefault = scope === "explorer" && narrow && !filter.clients?.length && me?.clientId;
+  // Project Manager is not a tickets-API filter: it is applied after the fetch, via the job lookup.
+  const pmFilter = Array.isArray(filter.pm) ? filter.pm.map(Number) : (filter.pm ? [Number(filter.pm)] : []);
+  delete filter.pm;
+  const guard = scope === "explorer" && narrow && !userHasFiltered(preset, filter);
+  const explorerDefault = guard && me?.clientId;
 
   let tasks, source, total, truncated = false;
   if (auth && !USE_FIXTURES) {
@@ -133,11 +192,15 @@ router.get("/", async (req, res) => {
     const rows = scope === "project" ? loadFixture("project-1530.json") : [...loadFixture("explorer-sample.json"), ...loadFixture("project-1530.json")];
     const f = { status: scope === "project" ? undefined : "incomplete", ...filter };
     if (explorerDefault) { f.clients = [String(me.clientId)]; narrowed.office = { id: me.clientId, name: me.client }; }
+    await enrichFromJobs(auth, rows);             // brand / office ids come from the job for fixture rows
     tasks = filterFixtureRows(rows, { preset, filter: f, identity });
     total = tasks.length; source = "fixtures";
   }
 
-  if (scope === "explorer" && narrow) tasks = applyGuardrails(tasks, total, narrowed);
+  await enrichFromJobs(auth, tasks);
+  if (pmFilter.length) { tasks = tasks.filter((t) => pmFilter.includes(t.projectManagerId)); total = tasks.length; truncated = false; }
+
+  if (guard) tasks = applyGuardrails(tasks, total, narrowed);
   else { narrowed.total = total; narrowed.shown = tasks.length; narrowed.threshold = SAFE_THRESHOLD; narrowed.applied = false; }
 
   // Overrides (rank, demo status, reassignments), departments, parent markers.
@@ -148,6 +211,7 @@ router.get("/", async (req, res) => {
     if (o?.assignees) t.assignees = o.assignees.map((a) => ({ id: Number(a.id), name: a.name, avatar: a.avatar || null }));
     for (const a of t.assignees) assigneeIds.add(a.id);
   }
+  for (const t of tasks) if (t.projectManagerId) assigneeIds.add(t.projectManagerId);
   const users = await getUsers(auth, [...assigneeIds]);
   const parentIds = new Set(tasks.map((t) => t.parentId).filter(Boolean));
   for (const t of tasks) {
@@ -164,6 +228,8 @@ router.get("/", async (req, res) => {
     }
     t.departments = [...new Map(t.assignees.filter((a) => a.departmentId).map((a) => [a.departmentId, { id: a.departmentId, name: a.department }])).values()];
     t.isParent = /^parent$/i.test(t.statusName) || parentIds.has(t.id);
+    const pm = t.projectManagerId ? users.get(t.projectManagerId) : null;
+    t.projectManager = pm ? { id: pm.id, name: pm.name } : (t.projectManagerId ? { id: t.projectManagerId, name: `User ${t.projectManagerId}` } : null);
   }
 
   res.json({

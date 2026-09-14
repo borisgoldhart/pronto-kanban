@@ -2,9 +2,10 @@
  * React wrapper around Bryntum TaskBoard.
  *
  * Creates the board once per grouping configuration and pushes prop changes into the
- * live instance: tasks -> taskStore, columns -> column store (hidden/order), zoom -> a
- * CSS variable. Recreating on a swimlane change keeps the wrapper simple; every other
- * change is applied in place. `boardRef` exposes the instance for realtime updates.
+ * live instance: tasks -> taskStore, columns -> column store (hidden/order), zoom ->
+ * tasksPerRow + column width (the card template follows through `cardSizes`).
+ * Recreating on a swimlane change keeps the wrapper simple; every other change is
+ * applied in place. `boardRef` exposes the instance for realtime updates.
  *
  * Pronto already consumes Bryntum's React wrappers (@bryntum/*-react-thin); this file is
  * the equivalent of <BryntumTaskBoard> plus the Pronto behaviours, so it can be replaced
@@ -12,7 +13,7 @@
  */
 import { useEffect, useLayoutEffect, useRef, type MutableRefObject } from "react";
 import { TaskBoard, type ColumnModel, type TaskModel } from "@bryntum/taskboard";
-import { buildBoardConfig, taskStoreOf, toTaskData, type BoardCallbacks } from "./board.config";
+import { buildBoardConfig, setAllLanesCollapsed, taskStoreOf, toTaskData, zoomLevel, type BoardCallbacks } from "./board.config";
 import type { BoardColumn, BoardLane, BoardTask, GroupBy } from "./model";
 import "./kanban.css";
 
@@ -22,14 +23,16 @@ export type KanbanBoardProps = {
   lanes: BoardLane[];
   groupBy: GroupBy;
   groupKey: string;               // changes force a rebuild (swimlane field/lanes)
-  zoom: number;                   // 0.7 .. 1.3
+  zoom: number;                   // ZOOM_LEVELS index (0 = large)
   showProjectOnCards: boolean;
+  collapsedLanes?: Set<string>;   // initial swimlane state (BR-06: all but the first collapsed)
+  laneRequest?: { collapsed: boolean; seq: number } | null; // "Expand all" / "Collapse all" clicks
   callbacks: BoardCallbacks;
   boardRef?: MutableRefObject<TaskBoard | null>;
   className?: string;
 };
 
-export function KanbanBoard({ tasks, columns, lanes, groupBy, groupKey, zoom, showProjectOnCards, callbacks, boardRef, className }: KanbanBoardProps) {
+export function KanbanBoard({ tasks, columns, lanes, groupBy, groupKey, zoom, showProjectOnCards, collapsedLanes, laneRequest, callbacks, boardRef, className }: KanbanBoardProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const localRef = useRef<TaskBoard | null>(null);
   const callbacksRef = useRef(callbacks);
@@ -40,13 +43,12 @@ export function KanbanBoard({ tasks, columns, lanes, groupBy, groupKey, zoom, sh
     const el = hostRef.current;
     if (!el) return;
     const board = new TaskBoard(buildBoardConfig(el, {
-      tasks, columns, lanes, groupBy, showProjectOnCards,
+      tasks, columns, lanes, groupBy, showProjectOnCards, zoom, collapsedLanes,
       callbacks: {
         onMove: (r) => callbacksRef.current.onMove(r),
         onRebalance: (r) => callbacksRef.current.onRebalance ? callbacksRef.current.onRebalance(r) : Promise.resolve([]),
         onReassign: (r) => callbacksRef.current.onReassign ? callbacksRef.current.onReassign(r) : Promise.resolve(),
         onOpen: (t) => callbacksRef.current.onOpen(t),
-        onHideColumn: (id) => callbacksRef.current.onHideColumn?.(id),
       },
     }));
     localRef.current = board;
@@ -73,10 +75,22 @@ export function KanbanBoard({ tasks, columns, lanes, groupBy, groupKey, zoom, sh
     }
   }, [columns, groupKey]);
 
-  // Zoom: cards and headers are sized in em, so one font-size scales the board
+  // Zoom: cards per row and column width; cardSizes swaps the template per width band
   useEffect(() => {
-    hostRef.current?.style.setProperty("--pk-zoom", String(zoom));
-  }, [zoom]);
+    const board = localRef.current;
+    if (!board) return;
+    const level = zoomLevel(zoom);
+    const b = board as unknown as { tasksPerRow: number };   // config + property on TaskBoardBase; the trial typings expose it on the config only
+    if (b.tasksPerRow !== level.tasksPerRow) b.tasksPerRow = level.tasksPerRow;
+    board.columns.forEach((rec) => { const c = rec as unknown as ColumnModel; if (c.width !== level.columnWidth) c.width = level.columnWidth; });
+  }, [zoom, groupKey]);
+
+  // Expand all / Collapse all (each click is a new request, so repeats still apply)
+  useEffect(() => {
+    const board = localRef.current;
+    if (!board || !laneRequest) return;
+    setAllLanesCollapsed(board, laneRequest.collapsed);
+  }, [laneRequest]);
 
   return <div ref={hostRef} className={`pk-board-host ${className || ""}`} />;
 }

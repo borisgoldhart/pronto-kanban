@@ -28,6 +28,7 @@ export type BoardTask = {
   jobId: number | null;
   jobTitle: string;
   jobCode: string;
+  projectManager: { id: number; name: string } | null;
   brand: string;
   client: string;
   assignees: ProntoTask["assignees"];
@@ -52,9 +53,9 @@ export const UNASSIGNED_LANE = "__unassigned";
 export const NO_DEPARTMENT_LANE = "__nodepartment";
 export const NO_PROJECT_LANE = "__noproject";
 
-/** Project code: Pronto shows the job number (extension) on cards; the API gives us the id. */
+/** Project code: the job extension Pronto shows (e.g. "2298", "AGRESSO"); the id when the job has none. */
 export function jobCode(t: ProntoTask): string {
-  return t.jobId ? `J${t.jobId}` : "";
+  return t.jobExtension || (t.jobId ? `J${t.jobId}` : "");
 }
 
 /** Lane keys a task belongs to under a grouping (several for User / Department). */
@@ -83,6 +84,7 @@ function base(t: ProntoTask): Omit<BoardTask, "id" | "lane"> {
     jobId: t.jobId,
     jobTitle: t.jobTitle,
     jobCode: jobCode(t),
+    projectManager: t.projectManager || null,
     brand: t.brand,
     client: t.client,
     assignees: t.assignees,

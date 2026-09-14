@@ -42,6 +42,17 @@ export type ProntoTask = {
   statusOverridden?: boolean;
   isParent?: boolean;
   clientId?: number | null;
+  brandId?: number | null;
+  jobExtension?: string | null;          // the project code Pronto shows (from the job)
+  projectManager?: { id: number; name: string } | null;
+};
+
+/** Pick-lists for the filter flyout (GET /api/tasks/options). */
+export type FilterOption = { id: string | number; name: string };
+export type FilterOptions = {
+  ok: true; me: { id: string; name: string } | null;
+  assignees: FilterOption[]; projectManagers: FilterOption[]; offices: FilterOption[]; brands: FilterOption[]; tags: FilterOption[];
+  statuses: { id: number; name: string; color: string }[];
 };
 
 /** What the Task Explorer guardrails (BRD BR-10) did to this result. */
@@ -57,6 +68,7 @@ export type Narrowed = {
 };
 
 export type SavedView = { id: string; name: string; board: string; createdAt: string; state?: ViewState; owner?: string };
+/** zoom: card size level 0 (large, default) .. 2 (small); older saved views carry the old numeric scale and are ignored. */
 export type ViewState = { preset?: string; q?: string; filters?: Record<string, unknown>; hiddenStatuses?: number[]; groupBy?: string; zoom?: number; narrow?: boolean };
 
 export type StatusInfo = { id: number; name: string; color: string; count: number; hiddenByDefault: boolean };
@@ -115,6 +127,7 @@ export const api = {
   brokerStart: (baseUrl?: string) => call<{ ok: true; pid: string; loginUrl: string; pollMs: number }>("/api/auth/broker/start", { method: "POST", body: JSON.stringify({ baseUrl }) }),
   brokerPoll: (pid: string) => call<{ ok: true; pending?: boolean; retryAfter?: number }>("/api/auth/broker/poll", { method: "POST", body: JSON.stringify({ pid }) }),
   tasks: (query: TaskQuery) => call<TasksResponse>(`/api/tasks?${taskQueryString(query)}`),
+  filterOptions: () => call<FilterOptions>("/api/tasks/options"),
   move: (body: { taskId: number; status?: { id: number; name: string; color: string } | null; prevRank: number | null; nextRank: number | null; origin?: string }) =>
     call<MoveResult>("/api/kanban/move", { method: "POST", body: JSON.stringify(body) }),
   rebalance: (ranks: { id: number; rank: number }[], origin?: string) => call<{ ok: true; ranks: { id: number; rank: number }[] }>("/api/kanban/rebalance", { method: "POST", body: JSON.stringify({ ranks, origin }) }),

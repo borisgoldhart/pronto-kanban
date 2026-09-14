@@ -32,8 +32,6 @@ export type BoardCallbacks = {
   onReassign?: (req: ReassignRequest) => Promise<void>;
   /** Open the task (double-click, menu). */
   onOpen: (task: BoardTask) => void;
-  /** The user hid a column from its header menu. */
-  onHideColumn?: (statusId: string) => void;
 };
 
 export type BoardOptions = {
@@ -42,13 +40,37 @@ export type BoardOptions = {
   lanes: BoardLane[];          // empty = no swimlanes
   groupBy: GroupBy;
   showProjectOnCards: boolean;
+  zoom: number;                // ZOOM_LEVELS index
+  collapsedLanes?: Set<string>; // swimlanes to start collapsed
   columnWidth?: number;
   callbacks: BoardCallbacks;
 };
 
+/**
+ * Zoom (BR-12), the way Bryntum's "zooming" demo does it: the slider changes
+ * `tasksPerRow`, cards get narrower, and `cardSizes` picks a different card template
+ * per width band (large / medium / small). No CSS scaling: each level is a real
+ * template, so small cards drop the chips that would not fit rather than shrinking them.
+ */
+export type ZoomLevel = { name: "large" | "medium" | "small"; label: string; tasksPerRow: number; columnWidth: number };
+export const ZOOM_LEVELS: ZoomLevel[] = [
+  { name: "large", label: "Large", tasksPerRow: 1, columnWidth: 300 },
+  { name: "medium", label: "Medium", tasksPerRow: 2, columnWidth: 320 },
+  { name: "small", label: "Small", tasksPerRow: 3, columnWidth: 340 },
+];
+export const DEFAULT_ZOOM = 0;
+export const zoomLevel = (i: number): ZoomLevel => ZOOM_LEVELS[Math.min(ZOOM_LEVELS.length - 1, Math.max(0, i | 0))];
+
+/** Width bands for cardSizes: with 1 / 2 / 3 cards per row in a ~300px column. */
+const CARD_SIZES = (showProject: boolean) => [
+  { name: "small", maxWidth: 125, maxAvatars: 1, headerItems: { text: { template: ({ taskRecord }: { taskRecord: TaskModel }) => cardTitle(asTask(taskRecord), "small") } }, bodyItems: { meta: { template: ({ taskRecord }: { taskRecord: TaskModel }) => cardMeta(asTask(taskRecord), { showProject: false, size: "small" }) } } },
+  { name: "medium", maxWidth: 200, maxAvatars: 2, headerItems: { text: { template: ({ taskRecord }: { taskRecord: TaskModel }) => cardTitle(asTask(taskRecord), "medium") } }, bodyItems: { meta: { template: ({ taskRecord }: { taskRecord: TaskModel }) => cardMeta(asTask(taskRecord), { showProject, size: "medium" }) } } },
+  { name: "large", maxAvatars: 3 },
+];
+
 /** The custom fields a card reads, declared so `record.<field>` works and changes track. */
 export const TASK_FIELDS = [
-  "taskId", "rank", "lane", "jobId", "jobTitle", "jobCode", "brand", "client", "assignees", "departments", "tags",
+  "taskId", "rank", "lane", "jobId", "jobTitle", "jobCode", "projectManager", "brand", "client", "assignees", "departments", "tags",
   "priority", "escalated", "starred", "startDate", "endDate", "isParent", "parentId", "activity", "seeded", "statusOverridden",
 ];
 
@@ -83,6 +105,7 @@ export function columnTasks(board: TaskBoard, column: ColumnModel, lane: string 
 export function buildBoardConfig(el: HTMLElement, opts: BoardOptions): Partial<TaskBoardConfig> {
   const { callbacks, groupBy } = opts;
   const useLanes = opts.lanes.length > 0;
+  const zoom = zoomLevel(opts.zoom);
   const laneName = new Map(opts.lanes.map((l) => [l.id, l.text]));
   const columnById = new Map(opts.columns.map((c) => [c.id, c]));
 
@@ -92,16 +115,18 @@ export function buildBoardConfig(el: HTMLElement, opts: BoardOptions): Partial<T
 
   const config: Partial<TaskBoardConfig> = {
     appendTo: el,
-    cls: "pk-board",
+    cls: useLanes ? "pk-board pk-board--lanes" : "pk-board",
     columnField: "status",
     swimlaneField: useLanes ? "lane" : undefined,
-    columns: opts.columns.map((c) => ({ id: c.id, text: c.text, color: c.color, hidden: c.hidden, width: opts.columnWidth ?? 300, minWidth: 220, htmlEncodeHeaderText: false, collapsible: true })),
-    swimlanes: useLanes ? opts.lanes.map((l) => ({ id: l.id, text: l.text, collapsible: true })) : undefined,
+    // Column headers: the status pill and count only (no collapse chevron, no menu).
+    columns: opts.columns.map((c) => ({ id: c.id, text: c.text, color: c.color, hidden: c.hidden, width: opts.columnWidth ?? zoom.columnWidth, minWidth: 220, htmlEncodeHeaderText: false, collapsible: false })),
+    swimlanes: useLanes ? opts.lanes.map((l) => ({ id: l.id, text: l.text, collapsible: true, collapsed: opts.collapsedLanes?.has(l.id) ?? false })) : undefined,
     columnTitleRenderer: ({ columnRecord }) => statusPill(columnRecord.text, String(columnRecord.color || "#999")),
     showCountInHeader: true,
-    showCollapseInHeader: true,
+    showCollapseInHeader: true,        // swimlanes only: columns are not collapsible and their header icons are hidden
     stickyHeaders: true,
-    tasksPerRow: 1,
+    tasksPerRow: zoom.tasksPerRow,
+    cardSizes: CARD_SIZES(opts.showProjectOnCards) as unknown as TaskBoardConfig["cardSizes"],
     stretchCards: true,
     virtualize: opts.tasks.length > 400,
     useDomTransition: false,
@@ -109,8 +134,8 @@ export function buildBoardConfig(el: HTMLElement, opts: BoardOptions): Partial<T
       taskStore: { fields: TASK_FIELDS, data: opts.tasks.map(toTaskData) },
     },
     // Card: two rows only. Default items (text, description, avatars) are switched off.
-    headerItems: { text: { type: "template", template: ({ taskRecord }) => cardTitle(asTask(taskRecord)) } },
-    bodyItems: { text: { hidden: true }, meta: { type: "template", template: ({ taskRecord }) => cardMeta(asTask(taskRecord), { showProject: opts.showProjectOnCards }) } },
+    headerItems: { text: { type: "template", template: ({ taskRecord }) => cardTitle(asTask(taskRecord), "large") } },
+    bodyItems: { text: { hidden: true }, meta: { type: "template", template: ({ taskRecord }) => cardMeta(asTask(taskRecord), { showProject: opts.showProjectOnCards, size: "large" }) } },
     footerItems: { resourceAvatars: { hidden: true } },
     features: {
       columnDrag: true,
@@ -132,12 +157,8 @@ export function buildBoardConfig(el: HTMLElement, opts: BoardOptions): Partial<T
           openTask: { text: "Open in Pronto", icon: "b-fa b-fa-arrow-up-right-from-square", weight: 100, onItem: ({ taskRecord }: { taskRecord?: unknown }) => { if (taskRecord) callbacks.onOpen(asTask(taskRecord as TaskModel)); } },
         },
       },
-      columnHeaderMenu: {
-        items: {
-          addTask: false, moveColumnLeft: false, moveColumnRight: false,
-          hideColumn: { text: "Hide column", icon: "b-fa b-fa-eye-slash", weight: 100, onItem: ({ columnRecord }: { columnRecord?: unknown }) => { if (columnRecord) callbacks.onHideColumn?.(String((columnRecord as ColumnModel).id)); } },
-        },
-      },
+      // Columns are chosen from the Columns menu in the control strip; no per-column menu.
+      columnHeaderMenu: false,
     },
     listeners: {
       taskDragStart: ({ taskRecords }) => { for (const r of taskRecords) { const t = asTask(r); dragOrigin.set(r, { status: String(t.status), lane: String(t.lane) }); } },
@@ -197,6 +218,12 @@ export function buildBoardConfig(el: HTMLElement, opts: BoardOptions): Partial<T
     },
   };
   return config;
+}
+
+/** Expand or collapse every swimlane in place. */
+export function setAllLanesCollapsed(board: TaskBoard, collapsed: boolean) {
+  const lanes = board.swimlanes as unknown as { forEach: (fn: (r: { collapsed: boolean }) => void) => void } | undefined;
+  lanes?.forEach((r) => { if (r.collapsed !== collapsed) r.collapsed = collapsed; });
 }
 
 /** Apply a change that arrived from another user (realtime) to every card of a task. */

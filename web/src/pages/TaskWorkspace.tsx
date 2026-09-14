@@ -9,13 +9,13 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { TaskBoard } from "@bryntum/taskboard";
-import { api, ApiError, type Narrowed, type ProntoTask, type SavedView, type StatusInfo, type TaskQuery, type ViewState } from "../api";
+import { api, ApiError, type FilterOptions, type Narrowed, type ProntoTask, type SavedView, type StatusInfo, type TaskQuery, type ViewState } from "../api";
 import { KanbanBoard } from "../kanban/KanbanBoard";
 import { matchesSearch, toBoardTasks, toColumns, toLanes, type BoardTask, type GroupBy } from "../kanban/model";
-import { applyRemoteChange, type BoardCallbacks } from "../kanban/board.config";
-import { ControlStrip, GROUP_OPTIONS, ZOOM_STEPS } from "../chrome/ControlStrip";
+import { DEFAULT_ZOOM, ZOOM_LEVELS, applyRemoteChange, type BoardCallbacks } from "../kanban/board.config";
+import { ControlStrip, GROUP_OPTIONS } from "../chrome/ControlStrip";
 import { LeftNav } from "../chrome/PageChrome";
-import { FilterFlyout, countActive, toApiFilter, type Filters } from "../chrome/FilterFlyout";
+import { AppliedFilters, FilterFlyout, appliedChips, countActive, normaliseFilters, toApiFilter, type Filters } from "../chrome/FilterFlyout";
 import { CLIENT_ID, useKanbanChannel } from "../realtime";
 
 export type TaskWorkspaceProps = {
@@ -46,7 +46,9 @@ export function TaskWorkspace({ scope, job, boardKey, title, prontoBase, groupOp
   const [view, setView] = useState<"list" | "kanban">("kanban");
   const [groupBy, setGroupBy] = useState<GroupBy>(defaultGroupBy);
   const [hidden, setHidden] = useState<Set<number> | null>(null);       // null = use defaults
-  const [zoom, setZoom] = useState(1);
+  const [zoom, setZoom] = useState(DEFAULT_ZOOM);
+  const [laneRequest, setLaneRequest] = useState<{ collapsed: boolean; seq: number } | null>(null);
+  const [options, setOptions] = useState<FilterOptions | null>(null);
   const [narrow, setNarrow] = useState(true);                            // BR-10 guardrails on
   const [prefsLoaded, setPrefsLoaded] = useState(false);
   const [views, setViews] = useState<SavedView[]>([]);
@@ -70,8 +72,9 @@ export function TaskWorkspace({ scope, job, boardKey, title, prontoBase, groupOp
         if (!alive) return;
         if (r.prefs?.hiddenStatuses) setHidden(new Set(r.prefs.hiddenStatuses));
         if (r.prefs?.groupBy && GROUP_OPTIONS.some((g) => g.id === r.prefs?.groupBy)) setGroupBy(r.prefs.groupBy as GroupBy);
-        if (r.prefs?.zoom && ZOOM_STEPS.includes(r.prefs.zoom)) setZoom(r.prefs.zoom);
+        if (typeof r.prefs?.zoom === "number" && Number.isInteger(r.prefs.zoom) && r.prefs.zoom >= 0 && r.prefs.zoom < ZOOM_LEVELS.length) setZoom(r.prefs.zoom);
       } catch { /* defaults */ }
+      try { const o = await api.filterOptions(); if (alive) setOptions(o); } catch { /* the flyout falls back to the loaded data */ }
       try { const v = await api.views(); if (alive) setViews(v.views.filter((x) => x.board === boardKey)); } catch { /* none */ }
       if (viewId) {
         try { const r = await api.view(viewId); if (alive) applyView(r.view.state, r.view.id); } catch { if (alive) setNotice("That shared view no longer exists."); }
@@ -97,10 +100,10 @@ export function TaskWorkspace({ scope, job, boardKey, title, prontoBase, groupOp
   function applyView(state: ViewState, id: string | null) {
     if (state.preset) setPreset(state.preset);
     setSearch(state.q || "");
-    setFilters((state.filters as Filters) || {});
+    setFilters(normaliseFilters(state.filters));
     if (state.hiddenStatuses) setHidden(new Set(state.hiddenStatuses));
     if (state.groupBy && GROUP_OPTIONS.some((g) => g.id === state.groupBy)) setGroupBy(state.groupBy as GroupBy);
-    if (state.zoom && ZOOM_STEPS.includes(state.zoom)) setZoom(state.zoom);
+    if (typeof state.zoom === "number" && Number.isInteger(state.zoom) && state.zoom >= 0 && state.zoom < ZOOM_LEVELS.length) setZoom(state.zoom);
     if (typeof state.narrow === "boolean") setNarrow(state.narrow);
     setActiveView(id);
   }
@@ -172,6 +175,9 @@ export function TaskWorkspace({ scope, job, boardKey, title, prontoBase, groupOp
   const lanes = useMemo(() => toLanes(visibleTasks, groupBy), [visibleTasks, groupBy]);
   const boardTasks = useMemo(() => toBoardTasks(visibleTasks, groupBy), [visibleTasks, groupBy]);
   const groupKey = `${groupBy}|${statuses.map((s) => s.id).join(",")}|${lanes.map((l) => l.id).join(",")}`;
+  // Grouped boards open with only the first swimlane expanded; the rest unfold on demand.
+  const collapsedLanes = useMemo(() => new Set(lanes.slice(1).map((l) => l.id)), [lanes]);
+  const chips = useMemo(() => appliedChips(filters, options, statuses), [filters, options, statuses]);
 
   const callbacks = useMemo<BoardCallbacks>(() => ({
     onMove: async ({ taskId, fromStatus, statusId, prevRank, nextRank }) => {
@@ -195,8 +201,7 @@ export function TaskWorkspace({ scope, job, boardKey, title, prontoBase, groupOp
       setNotice(toUserId ? `Task ${taskId} reassigned to ${toUserName}.` : `Task ${taskId} unassigned.`);
     },
     onOpen: (t: BoardTask) => { if (t.jobId) window.open(`${prontoBase}/v2/passport/${t.jobId}/tasklist/${t.taskId}`, "_blank", "noopener"); },
-    onHideColumn: (id) => setHidden((cur) => { const next = new Set(cur ?? hiddenSet); next.add(Number(id)); return next; }),
-  }), [statuses, prontoBase, hiddenSet]);
+  }), [statuses, prontoBase]);
 
   const toggleStatus = (id: number) => setHidden((cur) => { const next = new Set(cur ?? hiddenSet); if (next.has(id)) next.delete(id); else next.add(id); return next; });
 
@@ -222,12 +227,15 @@ export function TaskWorkspace({ scope, job, boardKey, title, prontoBase, groupOp
           title={title} count={visibleTasks.length} total={n?.total ?? meta.total}
           view={view} onView={setView}
           groupBy={groupBy} onGroupBy={setGroupBy} groupOptions={groupOptions}
+          onExpandAll={() => setLaneRequest((r) => ({ collapsed: false, seq: (r?.seq || 0) + 1 }))}
+          onCollapseAll={() => setLaneRequest((r) => ({ collapsed: true, seq: (r?.seq || 0) + 1 }))}
           statuses={statuses} hidden={hiddenSet} onToggleStatus={toggleStatus} onShowAllStatuses={() => setHidden(new Set())}
           zoom={zoom} onZoom={setZoom}
           filtersOpen={filtersOpen} filterCount={countActive(filters)} onToggleFilters={() => setFiltersOpen((v) => !v)}
           onResetOrder={resetOrder} onReload={() => load()} onSaveView={saveCurrentView} source={meta.source} live={live}
         />
 
+        <AppliedFilters chips={chips} filters={filters} onChange={(f) => { setFilters(f); setActiveView(null); }} />
         {error && <div className="pk-alert pk-alert--error" role="alert">{error}</div>}
         {notice && <div className="pk-alert" role="status">{notice} <button type="button" className="pk-link" onClick={() => setNotice(null)}>Dismiss</button></div>}
         {narrowedText && !error && (
@@ -244,7 +252,8 @@ export function TaskWorkspace({ scope, job, boardKey, title, prontoBase, groupOp
 
         <div className={`pk-board-area ${loading ? "is-loading" : ""}`}>
           {view === "kanban" ? (
-            <KanbanBoard tasks={boardTasks} columns={columns} lanes={lanes} groupBy={groupBy} groupKey={groupKey} zoom={zoom} showProjectOnCards={scope === "explorer" && groupBy !== "project"} callbacks={callbacks} boardRef={boardRef} />
+            <KanbanBoard tasks={boardTasks} columns={columns} lanes={lanes} groupBy={groupBy} groupKey={groupKey} zoom={zoom} showProjectOnCards={scope === "explorer" && groupBy !== "project"}
+              collapsedLanes={collapsedLanes} laneRequest={laneRequest} callbacks={callbacks} boardRef={boardRef} />
           ) : (
             <TaskList tasks={visibleTasks} onOpen={callbacks.onOpen} />
           )}
@@ -252,7 +261,7 @@ export function TaskWorkspace({ scope, job, boardKey, title, prontoBase, groupOp
         </div>
       </main>
 
-      <FilterFlyout open={filtersOpen} filters={filters} onChange={(f) => { setFilters(f); setActiveView(null); }} onClose={() => setFiltersOpen(false)} tasks={tasks} statuses={statuses} />
+      <FilterFlyout open={filtersOpen} filters={filters} onChange={(f) => { setFilters(f); setActiveView(null); }} onClose={() => setFiltersOpen(false)} tasks={tasks} statuses={statuses} options={options} />
     </div>
   );
 }

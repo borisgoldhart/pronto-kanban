@@ -12,10 +12,11 @@
   --pk-red: var(--pp-red, #ed0007);
 }
 
-html, body, #root { height: 100%; }
+/* The page scrolls; the board itself has a fixed height (see .pk-board-area) with its own scrollbars. */
+html, body, #root { min-height: 100%; }
 body { display: flex; flex-direction: column; }
-#root { display: flex; flex-direction: column; min-height: 0; }
-.pk-page { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; padding-top: 18px; padding-bottom: 24px; max-width: none; }
+#root { display: flex; flex-direction: column; }
+.pk-page { display: flex; flex-direction: column; flex: 1 1 auto; padding-top: 18px; padding-bottom: 24px; max-width: none; }
 .pk-loading-page { padding: 48px 40px; color: var(--pk-muted); }
 
 /* ---- banner (Inbox / project) -------------------------------------------- */
@@ -39,7 +40,7 @@ body { display: flex; flex-direction: column; }
 .pk-tab.is-active::after { content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; background: var(--pk-ink); }
 
 /* ---- workspace layout ------------------------------------------------------ */
-.pk-workspace { display: grid; grid-template-columns: 324px minmax(0, 1fr); gap: 26px; flex: 1 1 auto; min-height: 0; align-items: stretch; }
+.pk-workspace { display: grid; grid-template-columns: 324px minmax(0, 1fr); gap: 26px; flex: 1 1 auto; align-items: start; }
 .pk-card { background: #fff; border: 1px solid var(--pk-line); border-radius: 6px; }
 .pk-main { display: flex; flex-direction: column; min-height: 0; min-width: 0; }
 
@@ -75,7 +76,32 @@ body { display: flex; flex-direction: column; }
 .pk-select > svg:last-child { color: var(--pk-muted); }
 
 .pk-zoom { display: inline-flex; align-items: center; gap: 2px; height: 36px; padding: 0 4px; border: 1px solid var(--pk-line-strong); border-radius: 4px; background: #fff; }
-.pk-zoom__value { min-width: 40px; text-align: center; font-size: 12.5px; font-variant-numeric: tabular-nums; color: var(--pk-ink); }
+.pk-zoom__value { min-width: 56px; text-align: center; font-size: 12.5px; color: var(--pk-ink); }
+.pk-seg--lanes .pk-seg__btn { font-size: 12px; gap: 6px; }
+.pk-seg--lanes .pk-seg__btn span { display: inline; }
+
+/* ---- applied filters: grey chips under the strip ---- */
+.pk-applied { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 22px; border-bottom: 1px solid var(--pk-line); background: #fafbfc; }
+.pk-applied__label { font-size: 12px; font-weight: 700; color: var(--pk-muted); text-transform: uppercase; letter-spacing: .04em; margin-right: 4px; }
+.pk-applied__clear { font-size: 12.5px; margin-left: 4px; }
+.pk-fchip { display: inline-flex; align-items: center; gap: 6px; max-width: 260px; height: 26px; padding: 0 6px 0 10px; border-radius: 999px; background: #e9ebef; color: #2b3038; font-size: 12.5px; font-weight: 600; line-height: 1; }
+.pk-fchip__text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pk-fchip__x { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border: 0; border-radius: 50%; background: transparent; color: #5b6472; cursor: pointer; padding: 0; }
+.pk-fchip__x:hover { background: #d3d7dd; color: var(--pk-ink); }
+
+/* ---- multi-select field in the flyout ---- */
+.pk-field--multi { position: relative; }
+.pk-multi { height: auto; min-height: 44px; padding: 4px 12px 4px 8px; cursor: text; }
+.pk-multi.is-open { border-color: var(--pk-primary); box-shadow: 0 0 0 3px rgba(79,70,229,.12); }
+.pk-multi__chips { flex: 1; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; }
+.pk-multi__input { flex: 1 1 80px; min-width: 80px; height: 32px; border: 0; outline: 0; background: transparent; font: inherit; font-size: 14px; color: var(--pk-ink); padding: 0 4px; }
+.pk-multi.is-placeholder .pk-multi__input::placeholder { font-style: italic; color: #8a8f98; }
+.pk-multi__list { position: absolute; left: 0; right: 0; top: 100%; z-index: 20; max-height: 260px; overflow: auto; margin-top: 4px; background: #fff; border: 1px solid var(--pk-line-strong); border-radius: 4px; box-shadow: 0 10px 30px rgba(16,24,40,.14); padding: 6px; }
+.pk-multi__opt { display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 10px; border: 0; border-radius: 4px; background: transparent; text-align: left; font: inherit; font-size: 13.5px; color: var(--pk-ink); cursor: pointer; }
+.pk-multi__opt:hover { background: #f4f5f7; }
+.pk-multi__opt.is-on { font-weight: 700; }
+.pk-multi__opt .pk-checkbox.is-checked::after { content: ""; width: 5px; height: 9px; border: solid #fff; border-width: 0 2px 2px 0; transform: rotate(45deg); margin-top: -2px; }
+.pk-multi__empty { padding: 10px; font-size: 13px; color: var(--pk-muted); }
 
 .pk-iconbtn { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border: 0; border-radius: 4px; background: transparent; color: var(--pk-ink); cursor: pointer; padding: 0; }
 .pk-iconbtn:hover { background: #f2f2f4; }
@@ -108,7 +134,8 @@ body { display: flex; flex-direction: column; }
 .pk-link:hover { text-decoration: underline; }
 
 /* ---- board area ------------------------------------------------------------ */
-.pk-board-area { position: relative; display: flex; flex-direction: column; flex: 1 1 auto; min-height: 520px; padding: 14px 16px 12px; }
+/* Fixed board height regardless of screen size: the page scrolls to it, the board scrolls inside. */
+.pk-board-area { position: relative; display: flex; flex-direction: column; flex: none; height: var(--pk-board-height, 1200px); min-height: 0; padding: 14px 16px 12px; }
 .pk-board-area.is-loading .pk-board-host { opacity: .55; }
 .pk-loading { position: absolute; top: 18px; left: 50%; transform: translateX(-50%); padding: 6px 14px; border-radius: 999px; background: #fff; border: 1px solid var(--pk-line); font-size: 12.5px; color: var(--pk-muted); box-shadow: 0 4px 12px rgba(0,0,0,.08); }
 .pk-alert { margin: 10px 22px 0; padding: 9px 12px; border-radius: 4px; font-size: 13px; background: #e8f1fb; border: 1px solid #c5dcf3; color: #1b4f7f; }

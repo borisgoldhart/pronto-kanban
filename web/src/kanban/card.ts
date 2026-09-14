@@ -33,25 +33,42 @@ export function avatarHtml(a: { name: string; avatarUrl: string | null }, size =
   return `<span class="pk-avatar pk-avatar--fallback" title="${alt}" style="width:${size}px;height:${size}px"><span class="pk-avatar__initials">${enc(initials(a.name))}</span></span>`;
 }
 
-/** Row 1. */
-export function cardTitle(task: BoardTask): string {
-  return `<div class="pk-card-title" title="${enc(task.name)}">
+export type CardSize = "large" | "medium" | "small";
+
+/**
+ * Row 1: the title on one line (the full title is in the hover preview and the
+ * native tooltip), the escalation flag at the end. Small cards wrap to two lines
+ * instead, since they carry almost nothing else.
+ */
+export function cardTitle(task: BoardTask, size: CardSize = "large"): string {
+  return `<div class="pk-card-title pk-card-title--${size}" title="${enc(task.name)}">
     <span class="pk-card-title__text">${enc(task.name)}</span>
     ${task.escalated ? `<span class="pk-flag pk-flag--escalated" title="Escalated">${ICON_FLAME}</span>` : ""}
   </div>`;
 }
 
-/** Row 2. */
-export function cardMeta(task: BoardTask, opts: { showProject?: boolean } = {}): string {
+/**
+ * Row 2, per card size (the zoom levels):
+ *   large   id, project code, priority, parent/child, star, avatars (3)
+ *   medium  id, priority, parent/child marker, avatars (2)
+ *   small   id, priority, one avatar
+ */
+export function cardMeta(task: BoardTask, opts: { showProject?: boolean; size?: CardSize } = {}): string {
+  const size = opts.size || "large";
   const prio = PRIORITY[task.priority];
-  const avatars = task.assignees.slice(0, 3).map((a) => avatarHtml(a)).join("");
-  const extra = task.assignees.length > 3 ? `<span class="pk-avatar pk-avatar--more" title="${enc(task.assignees.slice(3).map((a) => a.name).join(", "))}"><span class="pk-avatar__initials">+${task.assignees.length - 3}</span></span>` : "";
-  return `<div class="pk-card-meta">
-    <span class="pk-chip pk-chip--id" title="Task #${enc(task.taskId)}">${ICON_TASK}<span>${enc(task.taskId)}</span></span>
-    ${opts.showProject !== false && task.jobCode ? `<span class="pk-chip pk-chip--job" title="${enc(task.jobTitle)}">${enc(task.jobCode)}</span>` : ""}
+  const maxAvatars = size === "large" ? 3 : size === "medium" ? 2 : 1;
+  const avatars = task.assignees.slice(0, maxAvatars).map((a) => avatarHtml(a)).join("");
+  const rest = task.assignees.slice(maxAvatars);
+  const extra = rest.length ? `<span class="pk-avatar pk-avatar--more" title="${enc(rest.map((a) => a.name).join(", "))}"><span class="pk-avatar__initials">+${rest.length}</span></span>` : "";
+  const family = task.isParent
+    ? `<span class="pk-chip pk-chip--parent" title="Parent task">${ICON_PARENT}${size === "large" ? "<span>Parent</span>" : ""}</span>`
+    : task.parentId ? `<span class="pk-chip pk-chip--child" title="Subtask of #${enc(task.parentId)}">${ICON_CHILD}${size === "large" ? `<span>${enc(task.parentId)}</span>` : ""}</span>` : "";
+  return `<div class="pk-card-meta pk-card-meta--${size}">
+    <span class="pk-chip pk-chip--id" title="Task #${enc(task.taskId)}">${size === "small" ? "" : ICON_TASK}<span>${enc(task.taskId)}</span></span>
+    ${size === "large" && opts.showProject !== false && task.jobCode ? `<span class="pk-chip pk-chip--job" title="${enc(task.jobTitle)}">${enc(task.jobCode)}</span>` : ""}
     ${prio ? `<span class="pk-chip pk-prio ${prio.cls}">${prio.label}</span>` : ""}
-    ${task.isParent ? `<span class="pk-chip pk-chip--parent" title="Parent task">${ICON_PARENT}<span>Parent</span></span>` : task.parentId ? `<span class="pk-chip pk-chip--child" title="Subtask of #${enc(task.parentId)}">${ICON_CHILD}<span>${enc(task.parentId)}</span></span>` : ""}
-    ${task.starred ? `<span class="pk-flag pk-flag--starred" title="Starred">${ICON_STAR}</span>` : ""}
+    ${size === "small" ? "" : family}
+    ${size === "large" && task.starred ? `<span class="pk-flag pk-flag--starred" title="Starred">${ICON_STAR}</span>` : ""}
     <span class="pk-card-meta__spacer"></span>
     <span class="pk-avatars">${avatars}${extra}</span>
   </div>`;
@@ -66,7 +83,8 @@ export function cardPreview(task: BoardTask, statusName: string, statusColor: st
   return `<div class="pk-tip">
     <div class="pk-tip__title">${task.escalated ? `<span class="pk-flag pk-flag--escalated">${ICON_FLAME}</span>` : ""}${enc(task.name)}</div>
     <div class="pk-tip__chips"><span class="pk-chip pk-chip--id">${ICON_TASK}<span>${enc(task.taskId)}</span></span><span class="pk-status-pill pk-status-pill--sm" style="--pk-status:${enc(statusColor)}">${enc(statusName)}</span>${prio ? `<span class="pk-chip pk-prio ${prio.cls}">${prio.label}</span>` : ""}${task.isParent ? `<span class="pk-chip pk-chip--parent">${ICON_PARENT}<span>Parent</span></span>` : ""}</div>
-    ${row("Project", enc(task.jobTitle))}
+    ${row("Project", task.jobTitle ? `${task.jobCode ? `<strong>${enc(task.jobCode)}</strong> ` : ""}${enc(task.jobTitle)}` : "")}
+    ${row("Project Manager", enc(task.projectManager?.name || ""))}
     ${row("Brand", enc(task.brand))}
     ${row("Assigned", people)}
     ${row("Dates", dates)}

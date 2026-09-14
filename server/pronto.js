@@ -84,6 +84,7 @@ export function normaliseTicket(t) {
     jobId: Number(job.jobid ?? t.jobid ?? 0) || null,
     jobTitle: job.jobtitle || "",
     brand: job.brand?.title || "",
+    brandId: job.brandid != null ? Number(job.brandid) : null,
     client: job.client?.company || "",
     clientId: job.client?.clientid != null ? Number(job.client.clientid) : null,
     assignees: (t.assignee_users || []).map((u) => ({ id: Number(u.userid), name: u.name, avatar: u.avatarUrl || null })),

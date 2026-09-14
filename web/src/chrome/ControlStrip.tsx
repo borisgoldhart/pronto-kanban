@@ -3,12 +3,16 @@
  * Kanban controls sit on the same line as the filter and export buttons, the zoom is
  * compact, and the supplementary actions live behind an ellipsis).
  *
- *   ALL TASKS  16 tasks        [list|kanban]  Group by [Project v]  [Columns v]  [- 100% +]  [filter]  [...]
+ *   ALL TASKS  16 tasks        [list|kanban]  Group by [Project v] [expand|collapse]  [Columns v]  [- Large +]  [filter]  [...]
+ *
+ * Zoom steps through the card size levels (large / medium / small): each is a different
+ * card template, the way Bryntum's zooming demo works, not a CSS scale.
  */
 import { useState } from "react";
 import type { GroupBy } from "../kanban/model";
+import { ZOOM_LEVELS, zoomLevel } from "../kanban/board.config";
 import type { StatusInfo } from "../api";
-import { IconCheck, IconChevronDown, IconColumns, IconEllipsis, IconExport, IconFilter, IconKanban, IconList, IconLive, IconRefresh, IconSave, IconZoomIn, IconZoomOut } from "./icons";
+import { IconCheck, IconChevronDown, IconCollapseAll, IconColumns, IconEllipsis, IconExpandAll, IconExport, IconFilter, IconKanban, IconList, IconLive, IconRefresh, IconSave, IconZoomIn, IconZoomOut } from "./icons";
 import { Popover } from "./Popover";
 
 /** BRD BR-06: no grouping, User, Department, Project (User Group and Office are out of the MVP). */
@@ -28,11 +32,13 @@ export type ControlStripProps = {
   groupBy: GroupBy;
   onGroupBy: (g: GroupBy) => void;
   groupOptions?: { id: GroupBy; label: string }[];
+  onExpandAll?: () => void;
+  onCollapseAll?: () => void;
   statuses: StatusInfo[];
   hidden: Set<number>;
   onToggleStatus: (id: number) => void;
   onShowAllStatuses: () => void;
-  zoom: number;
+  zoom: number;                 // ZOOM_LEVELS index
   onZoom: (z: number) => void;
   filtersOpen: boolean;
   filterCount: number;
@@ -44,12 +50,10 @@ export type ControlStripProps = {
   live?: "off" | "connecting" | "live" | "error";
 };
 
-export const ZOOM_STEPS = [0.75, 0.85, 1, 1.1, 1.2];
-
 export function ControlStrip(p: ControlStripProps) {
   const [menu, setMenu] = useState<"group" | "columns" | "more" | null>(null);
   const toggle = (m: typeof menu) => setMenu((cur) => (cur === m ? null : m));
-  const zi = ZOOM_STEPS.indexOf(p.zoom);
+  const zi = Math.min(ZOOM_LEVELS.length - 1, Math.max(0, p.zoom));
   const groupLabel = (p.groupOptions || GROUP_OPTIONS).find((g) => g.id === p.groupBy)?.label || "None";
   const hiddenCount = p.statuses.filter((s) => p.hidden.has(s.id)).length;
 
@@ -80,6 +84,12 @@ export function ControlStrip(p: ControlStripProps) {
             ))}
           </Popover>
         </div>
+        {p.groupBy !== "none" && (
+          <div className="pk-seg pk-seg--lanes" role="group" aria-label="Swimlanes">
+            <button type="button" className="pk-seg__btn" onClick={p.onExpandAll} title="Expand all swimlanes"><IconExpandAll /><span>Expand all</span></button>
+            <button type="button" className="pk-seg__btn" onClick={p.onCollapseAll} title="Collapse all swimlanes"><IconCollapseAll /><span>Collapse all</span></button>
+          </div>
+        )}
 
         <div className="pk-control">
           <button type="button" className="pk-select" onClick={() => toggle("columns")} aria-haspopup="menu" aria-expanded={menu === "columns"} title="Choose which statuses are shown as columns">
@@ -102,10 +112,10 @@ export function ControlStrip(p: ControlStripProps) {
           </Popover>
         </div>
 
-        <div className="pk-zoom" role="group" aria-label="Zoom">
-          <button type="button" className="pk-iconbtn" onClick={() => p.onZoom(ZOOM_STEPS[Math.max(0, zi - 1)])} disabled={zi <= 0} title="Smaller cards"><IconZoomOut /></button>
-          <span className="pk-zoom__value">{Math.round(p.zoom * 100)}%</span>
-          <button type="button" className="pk-iconbtn" onClick={() => p.onZoom(ZOOM_STEPS[Math.min(ZOOM_STEPS.length - 1, zi + 1)])} disabled={zi >= ZOOM_STEPS.length - 1} title="Larger cards"><IconZoomIn /></button>
+        <div className="pk-zoom" role="group" aria-label="Card size" title="Card size: large, medium or small cards (a different card template per level)">
+          <button type="button" className="pk-iconbtn" onClick={() => p.onZoom(zi + 1)} disabled={zi >= ZOOM_LEVELS.length - 1} title="Smaller cards"><IconZoomOut /></button>
+          <span className="pk-zoom__value">{zoomLevel(zi).label}</span>
+          <button type="button" className="pk-iconbtn" onClick={() => p.onZoom(zi - 1)} disabled={zi <= 0} title="Larger cards"><IconZoomIn /></button>
         </div>
 
         <button type="button" className={`pk-iconbtn pk-iconbtn--boxed ${p.filtersOpen || p.filterCount ? "is-active" : ""}`} onClick={p.onToggleFilters} title="Filters" aria-pressed={p.filtersOpen}>

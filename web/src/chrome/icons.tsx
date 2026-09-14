@@ -67,3 +67,10 @@ export const IconLive = ({ size = 8, ...p }: P) => (
 export const IconSave = ({ size = 14, ...p }: P) => (
   <svg {...base(size, p)} fill="none"><path d="M3 2.5h8l2.5 2.5v8.5h-11v-11Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" /><path d="M5 2.5v3.5h5V2.5M5 13v-4h6v4" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" /></svg>
 );
+
+export const IconExpandAll = ({ size = 14, ...p }: P) => (
+  <svg viewBox="0 0 16 16" width={size} height={size} aria-hidden="true" {...p}><path fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" d="M4.5 6.5 8 3l3.5 3.5M4.5 9.5 8 13l3.5-3.5" /></svg>
+);
+export const IconCollapseAll = ({ size = 14, ...p }: P) => (
+  <svg viewBox="0 0 16 16" width={size} height={size} aria-hidden="true" {...p}><path fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" d="M4.5 2.5 8 6l3.5-3.5M4.5 13.5 8 10l3.5 3.5" /></svg>
+);

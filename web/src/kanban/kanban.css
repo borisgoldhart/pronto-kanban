@@ -5,7 +5,6 @@
    ============================================================ */
 
 .pk-board-host {
-  --pk-zoom: 1;
   --pk-font: var(--pp-font, "Lato", -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif);
   --pk-ink: var(--pp-ink, #18181a);
   --pk-muted: var(--pp-muted, #8a94a1);
@@ -21,7 +20,7 @@
   display: flex;
   flex-direction: column;
   font-family: var(--pk-font);
-  font-size: calc(13px * var(--pk-zoom));
+  font-size: 13px;
 }
 
 /* The board fills its host; the host is sized by the page (flex column). */
@@ -41,15 +40,15 @@
   --b-task-board-column-min-width: 16em;
   --b-task-board-column-separator-border: none;
 
-  --b-task-board-column-header-background: var(--pk-column-bg);
+  --b-task-board-column-header-background: #fff;
   --b-task-board-column-header-color: var(--pk-ink);
-  --b-task-board-column-header-font-size: 1em;
+  --b-task-board-column-header-font-size: 1.08em;
   --b-task-board-column-header-font-weight: 700;
-  --b-task-board-column-header-padding: 0.75em 0.6em 0.5em;
-  --b-task-board-column-header-gap: 0.5em;
-  --b-task-board-column-header-border-bottom: none;
+  --b-task-board-column-header-padding: 0.8em 0.8em 0.75em;
+  --b-task-board-column-header-gap: 0.6em;
+  --b-task-board-column-header-border-bottom: 1px solid var(--pk-line);
   --b-task-board-column-header-border-top: none;
-  --b-task-board-column-header-box-shadow: none;
+  --b-task-board-column-header-box-shadow: 0 1px 2px rgba(16, 24, 40, 0.06);
   --b-task-board-column-header-text-transform: none;
   --b-task-board-column-header-icon-color: var(--pk-muted);
   --b-task-board-column-headers-sticky-background: transparent;
@@ -94,24 +93,24 @@
   --b-primary: var(--pp-primary, #4f46e5);
 }
 
-/* ---- column header: status pill, count, chevron, menu ------- */
+/* ---- column header: a white band with the status colour along the top edge, the
+   status pill and the count. No collapse chevron, no menu (columns are chosen from
+   the Columns menu in the control strip). ------------------------------------- */
 .pk-status-pill {
   display: inline-flex; align-items: center; max-width: 100%;
-  padding: 0.28em 0.8em; border-radius: 999px;
+  padding: 0.32em 0.9em; border-radius: 999px;
   background: var(--pk-status, #999); color: #fff;
-  font-size: 0.92em; font-weight: 700; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  font-size: 0.95em; font-weight: 700; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   letter-spacing: 0.01em;
 }
+.pk-board-host .b-task-board-column-header { position: relative; border-radius: var(--pk-radius) var(--pk-radius) 0 0; overflow: hidden; }
+/* Bryntum puts the column colour in --b-primary on the header (b-colorize); it paints the top edge. */
+.pk-board-host .b-task-board-column-header::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 4px; background: var(--b-primary, var(--pk-line-strong)); }
 .pk-board-host .b-task-board-column-title { min-width: 0; font-weight: 700; }
-.pk-board-host .b-task-board-column-count { border-radius: 999px; padding: 0.15em 0.6em; font-weight: 700; }
-.pk-board-host .b-task-board-column-header .b-icon,
-.pk-board-host .b-task-board-column-header .b-button { color: var(--pk-muted); }
-.pk-board-host .b-task-board-column-header-menu-button:hover,
-.pk-board-host .b-task-board-column-expander:hover { color: var(--pk-ink); }
-
-/* collapsed column: narrow rail with the pill rotated, count on top (Varun's wireframe) */
-.pk-board-host .b-task-board-column.b-collapsed { --b-task-board-column-min-width: 3.2em; }
-.pk-board-host .b-task-board-column.b-collapsed .pk-status-pill { writing-mode: vertical-rl; transform: rotate(180deg); padding: 0.8em 0.32em; }
+.pk-board-host .b-task-board-column-count { border-radius: 999px; padding: 0.2em 0.7em; font-weight: 700; font-size: 0.9em; }
+.pk-board-host .b-task-board-column-header .b-task-board-column-header-menu-button,
+.pk-board-host .b-task-board-column-header .b-task-board-column-expander { display: none; }
+.pk-board-host .b-task-board-column-header.b-colorize { background: #fff; color: var(--pk-ink); }
 
 /* ---- cards --------------------------------------------------- */
 .pk-board-host .b-task-board-card { cursor: grab; }
@@ -121,15 +120,25 @@
 .pk-board-host .b-task-board-template { display: block; width: 100%; }
 
 .pk-card-title { display: flex; align-items: flex-start; gap: 0.5em; font-weight: 700; font-size: 1em; line-height: 1.35; color: var(--pk-ink); }
-.pk-card-title__text {
-  flex: 1 1 auto; min-width: 0;
-  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
-}
+/* One line: the full title is on hover (native tooltip) and in the preview. */
+.pk-card-title__text { flex: 1 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Small cards have room for little else, so the title wraps to two lines. */
+.pk-card-title--small { font-size: 0.9em; line-height: 1.3; }
+.pk-card-title--small .pk-card-title__text { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.pk-card-title--medium { font-size: 0.95em; }
 .pk-flag { display: inline-flex; align-items: center; flex: none; }
 .pk-flag--escalated { color: #e5252c; margin-top: 0.15em; }
 .pk-flag--starred { color: #e8a33d; }
 
 .pk-card-meta { display: flex; align-items: center; gap: 0.4em; margin-top: 0.45em; font-size: 0.88em; color: var(--pk-muted); min-height: 1.75em; }
+.pk-card-meta--medium { gap: 0.3em; font-size: 0.82em; }
+.pk-card-meta--small { gap: 0.25em; font-size: 0.78em; margin-top: 0.3em; }
+.pk-card-meta--small .pk-chip { padding: 0.1em 0.4em; }
+/* Multi-per-row (inline) cards get a fixed height from Bryntum; ours size to their two rows. */
+.pk-board-host .b-inline .b-task-board-card { height: auto; }
+/* Bryntum's size classes on the column body, for padding per level */
+.pk-board-host .b-medium-cards { --b-task-board-card-header-padding: 0.55em 0.65em 0.2em; --b-task-board-card-body-padding: 0 0.65em 0.55em; }
+.pk-board-host .b-small-cards { --b-task-board-card-header-padding: 0.45em 0.5em 0.15em; --b-task-board-card-body-padding: 0 0.5em 0.45em; }
 .pk-card-meta__spacer { flex: 1 1 auto; }
 .pk-chip { display: inline-flex; align-items: center; gap: 0.35em; padding: 0.18em 0.55em; border-radius: 999px; border: 1px solid var(--pk-line); background: #fff; font-weight: 700; font-size: 0.95em; line-height: 1.3; white-space: nowrap; color: #4b5563; }
 .pk-chip--id { color: #4b5563; }
@@ -161,6 +170,7 @@
 /* Empty columns inside swimlanes stay short; the top-level board keeps a tall drop area. */
 .pk-board-host .b-task-board-swimlane .b-task-board-column-body { min-height: 3.6em; }
 .pk-board-host .b-task-board-swimlane .b-task-board-column-body-inner { min-height: 3.6em; }
-/* Swimlanes take the height of their cards rather than sharing the board height. */
-.pk-board-host .b-task-board-swimlane { flex: 0 0 auto !important; }
+/* Swimlanes take the height of their cards rather than sharing the board height
+   (the single implicit lane of an ungrouped board still fills it). */
+.pk-board-host .pk-board--lanes .b-task-board-swimlane { flex: 0 0 auto !important; }
 .pk-board-host .b-task-board-swimlane .b-task-board-column-body { min-height: 3.2em; }

@@ -1,17 +1,25 @@
 /**
  * "FILTERS: TASKS" flyout, replicating the Task Explorer advanced filters panel so the
- * demo feels familiar. Presentation copy of Pronto's design; the fields that the
- * prototype can honour are wired to the tasks query (the API's own filter keys).
+ * demo feels familiar. Fields the prototype honours are wired to the tasks query (the
+ * API's own filter keys); Project Manager is resolved server-side through the job.
+ *
+ * Multi-select fields (Assigned Users, Project Manager, Office, Brand, Task Tags, Task
+ * Status) render the chosen values as grey chips; the same chips appear under the
+ * control strip (AppliedFilters) so the user can see and remove what is applied without
+ * opening the flyout.
  */
-import { useMemo, useState } from "react";
-import type { ProntoTask, StatusInfo } from "../api";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { FilterOption, FilterOptions, ProntoTask, StatusInfo } from "../api";
 import { IconArrowRight, IconCalendar, IconChevronDown, IconChevronUp, IconClose, IconFlame } from "./icons";
 
 export type Filters = {
-  assignee?: string;
-  tag?: string;
+  assignees?: string[];
+  projectManagers?: string[];
+  offices?: string[];
+  brands?: string[];
+  tags?: string[];
   allTags?: boolean;
-  status?: string;
+  statuses?: string[];
   escalated?: boolean;
   priority?: string;
   reportedBy?: string;
@@ -19,21 +27,32 @@ export type Filters = {
   endDate?: string;
   parentTask?: string;
   taskType?: string;
-  project?: string;
-  office?: string;
 };
 
+const MULTI: (keyof Filters)[] = ["assignees", "projectManagers", "offices", "brands", "tags", "statuses"];
+
+function isSet(k: string, v: unknown): boolean {
+  if (k === "allTags") return false;
+  if (k === "taskType") return Boolean(v) && v !== "all";
+  if (Array.isArray(v)) return v.length > 0;
+  return v !== undefined && v !== "" && v !== false;
+}
+
+/** Number of filters in use (the badge on the filter button). */
 export function countActive(f: Filters): number {
-  return Object.entries(f).filter(([k, v]) => k !== "allTags" && v !== undefined && v !== "" && v !== false).length;
+  return Object.entries(f).filter(([k, v]) => isSet(k, v)).length;
 }
 
 /** Translate the flyout state into the API's filter[...] keys. */
 export function toApiFilter(f: Filters): Record<string, string | number | (string | number)[]> {
   const out: Record<string, string | number | (string | number)[]> = {};
-  if (f.assignee) out.assignees = [f.assignee];
-  if (f.tag) out.tags = [f.tag];
-  if (f.allTags) out.show_all_tags_only = 1;
-  if (f.status) out.status = [f.status];
+  if (f.assignees?.length) out.assignees = f.assignees;
+  if (f.projectManagers?.length) out.pm = f.projectManagers;
+  if (f.offices?.length) out.clients = f.offices;
+  if (f.brands?.length) out.brands = f.brands;
+  if (f.tags?.length) out.tags = f.tags;
+  if (f.allTags && f.tags?.length) out.show_all_tags_only = 1;
+  if (f.statuses?.length) out.status = f.statuses;
   if (f.escalated) out.show_escalated_ticket = 1;
   if (f.priority) out.priority_new = [f.priority];
   if (f.reportedBy) out.reported_by = [f.reportedBy];
@@ -41,12 +60,68 @@ export function toApiFilter(f: Filters): Record<string, string | number | (strin
   if (f.endDate) out.end_date = f.endDate;
   if (f.parentTask) out.parent_ticket_id = f.parentTask;
   if (f.taskType && f.taskType !== "all") out.ticket_type = [f.taskType];
-  if (f.project) out.jobs = [f.project];
-  if (f.office) out.clients = [f.office];
   return out;
 }
 
+/** Saved views from before the multi-select change carry single values; lift them. */
+export function normaliseFilters(raw: Record<string, unknown> | undefined): Filters {
+  if (!raw) return {};
+  const f: Record<string, unknown> = { ...raw };
+  const lift = (from: string, to: keyof Filters) => { if (typeof f[from] === "string" && f[from]) { f[to] = [f[from]]; } delete f[from]; };
+  lift("assignee", "assignees"); lift("tag", "tags"); lift("status", "statuses"); lift("office", "offices");
+  delete f.project;
+  for (const k of MULTI) if (f[k] !== undefined && !Array.isArray(f[k])) f[k] = f[k] ? [String(f[k])] : [];
+  return f as Filters;
+}
+
 type Option = { value: string; label: string };
+const toOptions = (list: FilterOption[] | undefined): Option[] => (list || []).map((o) => ({ value: String(o.id), label: o.name }));
+
+/** One applied filter, as a chip: label (for the row under the strip) and how to remove it. */
+export type AppliedChip = { key: string; label: string; remove: (f: Filters) => Filters };
+
+export function appliedChips(f: Filters, options: FilterOptions | null, statuses: StatusInfo[]): AppliedChip[] {
+  const out: AppliedChip[] = [];
+  const name = (list: FilterOption[] | undefined, id: string) => list?.find((o) => String(o.id) === id)?.name || id;
+  const multi = (key: keyof Filters, list: FilterOption[] | undefined, prefix?: string) => {
+    for (const id of (f[key] as string[] | undefined) || []) {
+      out.push({ key: `${key}:${id}`, label: `${prefix ? `${prefix}: ` : ""}${name(list, id)}`, remove: (cur) => ({ ...cur, [key]: ((cur[key] as string[]) || []).filter((x) => x !== id) }) });
+    }
+  };
+  multi("assignees", options?.assignees);
+  multi("projectManagers", options?.projectManagers, "PM");
+  multi("offices", options?.offices);
+  multi("brands", options?.brands);
+  multi("tags", options?.tags, "Tag");
+  multi("statuses", statuses.map((s) => ({ id: s.id, name: s.name })), "Status");
+  if (f.escalated) out.push({ key: "escalated", label: "Escalated", remove: (cur) => ({ ...cur, escalated: false }) });
+  if (f.priority) out.push({ key: "priority", label: `P${f.priority}`, remove: (cur) => ({ ...cur, priority: undefined }) });
+  if (f.reportedBy) out.push({ key: "reportedBy", label: `Reported by ${name(options?.assignees, f.reportedBy)}`, remove: (cur) => ({ ...cur, reportedBy: undefined }) });
+  if (f.startDate) out.push({ key: "startDate", label: `From ${f.startDate}`, remove: (cur) => ({ ...cur, startDate: undefined }) });
+  if (f.endDate) out.push({ key: "endDate", label: `To ${f.endDate}`, remove: (cur) => ({ ...cur, endDate: undefined }) });
+  if (f.parentTask) out.push({ key: "parentTask", label: `Parent #${f.parentTask}`, remove: (cur) => ({ ...cur, parentTask: undefined }) });
+  if (f.taskType && f.taskType !== "all") out.push({ key: "taskType", label: `Type: ${f.taskType}`, remove: (cur) => ({ ...cur, taskType: undefined }) });
+  return out;
+}
+
+/** The grey chip row under the control strip. */
+export function AppliedFilters({ chips, onChange, filters }: { chips: AppliedChip[]; onChange: (f: Filters) => void; filters: Filters }) {
+  if (!chips.length) return null;
+  return (
+    <div className="pk-applied" role="status" aria-label="Applied filters">
+      <span className="pk-applied__label">Filters</span>
+      {chips.map((c) => (
+        <span key={c.key} className="pk-fchip">
+          <span className="pk-fchip__text">{c.label}</span>
+          <button type="button" className="pk-fchip__x" onClick={() => onChange(c.remove(filters))} aria-label={`Remove ${c.label}`}><IconClose size={10} /></button>
+        </span>
+      ))}
+      <button type="button" className="pk-link pk-applied__clear" onClick={() => onChange({})}>Clear all</button>
+    </div>
+  );
+}
+
+/* ---- fields ------------------------------------------------------------------- */
 
 function Select({ label, value, placeholder, options, onChange }: { label: string; value: string | undefined; placeholder: string; options: Option[]; onChange: (v: string) => void }) {
   return (
@@ -63,6 +138,53 @@ function Select({ label, value, placeholder, options, onChange }: { label: strin
   );
 }
 
+/** Multi-select: chosen values as chips inside the control, a searchable list below when open. */
+function MultiSelect({ label, values, placeholder, options, onChange }: { label: string; values: string[]; placeholder: string; options: Option[]; onChange: (v: string[]) => void }) {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState("");
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
+    document.addEventListener("mousedown", onDoc); document.addEventListener("keydown", onKey);
+    return () => { document.removeEventListener("mousedown", onDoc); document.removeEventListener("keydown", onKey); };
+  }, [open]);
+  const chosen = values.map((v) => options.find((o) => o.value === v) || { value: v, label: v });
+  const list = options.filter((o) => !q || o.label.toLowerCase().includes(q.toLowerCase()));
+  const toggle = (v: string) => onChange(values.includes(v) ? values.filter((x) => x !== v) : [...values, v]);
+  return (
+    <div className="pk-field pk-field--multi" ref={ref}>
+      <span className="pk-field__label">{label}</span>
+      <div className={`pk-field__control pk-multi ${values.length ? "" : "is-placeholder"} ${open ? "is-open" : ""}`} onClick={() => setOpen(true)}>
+        <div className="pk-multi__chips">
+          {chosen.map((o) => (
+            <span key={o.value} className="pk-fchip">
+              <span className="pk-fchip__text">{o.label}</span>
+              <button type="button" className="pk-fchip__x" onClick={(e) => { e.stopPropagation(); toggle(o.value); }} aria-label={`Remove ${o.label}`}><IconClose size={10} /></button>
+            </span>
+          ))}
+          <input className="pk-multi__input" value={q} placeholder={values.length ? "" : placeholder} onChange={(e) => { setQ(e.target.value); setOpen(true); }} onFocus={() => setOpen(true)} />
+        </div>
+        <IconChevronDown />
+      </div>
+      {open && (
+        <div className="pk-multi__list" role="listbox" aria-multiselectable="true">
+          {list.length === 0 && <div className="pk-multi__empty">No matches</div>}
+          {list.map((o) => {
+            const on = values.includes(o.value);
+            return (
+              <button key={o.value} type="button" role="option" aria-selected={on} className={`pk-multi__opt ${on ? "is-on" : ""}`} onClick={() => toggle(o.value)}>
+                <span className={`pk-checkbox ${on ? "is-checked" : ""}`} />{o.label}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function Check({ label, checked, onChange, icon }: { label: string; checked: boolean; onChange: (v: boolean) => void; icon?: React.ReactNode }) {
   return (
     <label className="pk-check">
@@ -73,28 +195,19 @@ function Check({ label, checked, onChange, icon }: { label: string; checked: boo
   );
 }
 
-export function FilterFlyout({ open, filters, onChange, onClose, tasks, statuses }: { open: boolean; filters: Filters; onChange: (f: Filters) => void; onClose: () => void; tasks: ProntoTask[]; statuses: StatusInfo[] }) {
-  const [taskOpen, setTaskOpen] = useState(true);
-  const [projectOpen, setProjectOpen] = useState(false);
+/* ---- the flyout ------------------------------------------------------------------- */
 
-  // Option lists come from the loaded data so every choice returns results in the demo.
-  const opts = useMemo(() => {
-    const users = new Map<string, string>(), tags = new Set<string>(), projects = new Map<string, string>(), offices = new Set<string>();
-    for (const t of tasks) {
-      for (const a of t.assignees) users.set(String(a.id), a.name);
-      for (const g of t.tags) tags.add(g);
-      if (t.jobId) projects.set(String(t.jobId), t.jobTitle);
-      if (t.client) offices.add(t.client);
-    }
-    const byLabel = (a: Option, b: Option) => a.label.localeCompare(b.label);
-    return {
-      users: [...users].map(([value, label]) => ({ value, label })).sort(byLabel),
-      tags: [...tags].map((v) => ({ value: v, label: v })).sort(byLabel),
-      projects: [...projects].map(([value, label]) => ({ value, label })).sort(byLabel),
-      offices: [...offices].map((v) => ({ value: v, label: v })).sort(byLabel),
-      statuses: statuses.map((s) => ({ value: String(s.id), label: s.name })),
-    };
-  }, [tasks, statuses]);
+export function FilterFlyout({ open, filters, onChange, onClose, tasks, statuses, options }: { open: boolean; filters: Filters; onChange: (f: Filters) => void; onClose: () => void; tasks: ProntoTask[]; statuses: StatusInfo[]; options: FilterOptions | null }) {
+  const [taskOpen, setTaskOpen] = useState(true);
+
+  const opts = useMemo(() => ({
+    users: toOptions(options?.assignees),
+    pms: toOptions(options?.projectManagers),
+    offices: toOptions(options?.offices),
+    brands: toOptions(options?.brands),
+    tags: toOptions(options?.tags),
+    statuses: (options?.statuses?.length ? options.statuses : statuses).map((s) => ({ value: String(s.id), label: s.name })),
+  }), [options, statuses]);
 
   const set = (patch: Partial<Filters>) => onChange({ ...filters, ...patch });
   if (!open) return null;
@@ -112,10 +225,13 @@ export function FilterFlyout({ open, filters, onChange, onClose, tasks, statuses
         </button>
         {taskOpen && (
           <div className="pk-flyout__body">
-            <Select label="Assigned Users" placeholder="Select Assigned Users..." value={filters.assignee} options={opts.users} onChange={(v) => set({ assignee: v })} />
-            <Select label="Task Tags" placeholder="Select Task Tags..." value={filters.tag} options={opts.tags} onChange={(v) => set({ tag: v })} />
+            <MultiSelect label="Assigned Users" placeholder="Select Assigned Users..." values={filters.assignees || []} options={opts.users} onChange={(v) => set({ assignees: v })} />
+            <MultiSelect label="Project Manager" placeholder="Select Project Managers..." values={filters.projectManagers || []} options={opts.pms} onChange={(v) => set({ projectManagers: v })} />
+            <MultiSelect label="Office" placeholder="Select Offices..." values={filters.offices || []} options={opts.offices} onChange={(v) => set({ offices: v })} />
+            <MultiSelect label="Brand" placeholder="Select Brands..." values={filters.brands || []} options={opts.brands} onChange={(v) => set({ brands: v })} />
+            <MultiSelect label="Task Tags" placeholder="Select Task Tags..." values={filters.tags || []} options={opts.tags} onChange={(v) => set({ tags: v })} />
             <Check label="Show Tasks that contain all Task Tags only" checked={filters.allTags ?? true} onChange={(v) => set({ allTags: v })} />
-            <Select label="Task Status" placeholder="Select Task Status..." value={filters.status} options={opts.statuses} onChange={(v) => set({ status: v })} />
+            <MultiSelect label="Task Status" placeholder="Select Task Status..." values={filters.statuses || []} options={opts.statuses} onChange={(v) => set({ statuses: v })} />
             <Check label="Escalated Tasks only" icon={<span className="pk-check__prefix">Show <IconFlame /></span>} checked={Boolean(filters.escalated)} onChange={(v) => set({ escalated: v })} />
             <Select label="Priority" placeholder="Select Priority..." value={filters.priority} options={[{ value: "1", label: "P1" }, { value: "2", label: "P2" }, { value: "3", label: "P3" }]} onChange={(v) => set({ priority: v })} />
             <Select label="Reported By" placeholder="Select Reported By..." value={filters.reportedBy} options={opts.users} onChange={(v) => set({ reportedBy: v })} />
@@ -130,7 +246,7 @@ export function FilterFlyout({ open, filters, onChange, onClose, tasks, statuses
                 <span className="pk-field__control pk-field__control--date"><IconCalendar /><input type="date" value={filters.endDate || ""} onChange={(e) => set({ endDate: e.target.value })} /></span>
               </label>
             </div>
-            <Select label="Parent Task" placeholder="Select Parent Group Task..." value={filters.parentTask} options={tasks.filter((t) => /parent/i.test(t.statusName)).map((t) => ({ value: String(t.id), label: t.title }))} onChange={(v) => set({ parentTask: v })} />
+            <Select label="Parent Task" placeholder="Select Parent Group Task..." value={filters.parentTask} options={tasks.filter((t) => t.isParent || /parent/i.test(t.statusName)).map((t) => ({ value: String(t.id), label: t.title }))} onChange={(v) => set({ parentTask: v })} />
             <label className="pk-field">
               <span className="pk-field__label">Task Type</span>
               <span className="pk-field__control">
@@ -140,18 +256,6 @@ export function FilterFlyout({ open, filters, onChange, onClose, tasks, statuses
                 <IconChevronDown />
               </span>
             </label>
-            <Select label="Project" placeholder="Select Project..." value={filters.project} options={opts.projects} onChange={(v) => set({ project: v })} />
-          </div>
-        )}
-      </section>
-
-      <section className={`pk-flyout__section ${projectOpen ? "is-open" : ""}`}>
-        <button type="button" className="pk-flyout__section-head" onClick={() => setProjectOpen((v) => !v)} aria-expanded={projectOpen}>
-          <span>Project-Specific</span>{projectOpen ? <IconChevronUp size={14} /> : <IconChevronDown size={14} />}
-        </button>
-        {projectOpen && (
-          <div className="pk-flyout__body">
-            <Select label="Project Office" placeholder="Select Project Office..." value={filters.office} options={opts.offices} onChange={(v) => set({ office: v })} />
           </div>
         )}
       </section>
