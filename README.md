@@ -96,6 +96,14 @@ field is set to the rank, so Bryntum's ordering and the persisted order never di
   project code shown on cards (`jobExtension`), the Project Manager, brand and office of
   each task's project. The Project Manager filter is applied after the fetch (it is not a
   tickets-API key); Brand and Office map to the API's `brands` / `clients` keys.
+- Filter facts verified against Beta on 14 Sep: `filter[assignees][]` also matches tasks
+  assigned to a user group the person belongs to, so the explicit Assigned Users filter is
+  re-applied strictly after the fetch (direct assignment only; the "Tasks Assigned to Me"
+  preset keeps Pronto's group semantics). `filter[priority_new]` must be a single value,
+  not a list. `filter[tags][]` takes tag ids (`tags_for_ticket[].tagid`), not names.
+  `filter[ticket_type][]` takes numeric type ids the payload does not expose, so Task Type
+  is not offered. Brands, clients, status, search, escalated, reported_by, start/end dates
+  and parent_ticket_id behave as expected.
 - "Updated within" (`filter[updated_from]`, `filter[updated_to]`, last activity) is applied
   after the fetch like Project Manager: the tickets API has no activity-date key. When the
   guardrails narrow a view, the office and the recency window they applied appear in the

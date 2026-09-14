@@ -89,6 +89,7 @@ export function normaliseTicket(t) {
     clientId: job.client?.clientid != null ? Number(job.client.clientid) : null,
     assignees: (t.assignee_users || []).map((u) => ({ id: Number(u.userid), name: u.name, avatar: u.avatarUrl || null })),
     tags: (t.tags_for_ticket || []).map((g) => String(g.name || "").trim()).filter(Boolean),
+    tagIds: (t.tags_for_ticket || []).map((g) => (g.tagid != null ? Number(g.tagid) : null)).filter((x) => x != null),
     startDate: t.startdateticket ? String(t.startdateticket).slice(0, 10) : null,
     endDate: t.enddateticket ? String(t.enddateticket).slice(0, 10) : null,
     priority: Number(t.priority_new ?? 0),          // 0 none, 1 P1 .. 3 P3 (matches the tile chips)

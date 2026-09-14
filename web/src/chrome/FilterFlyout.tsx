@@ -63,7 +63,7 @@ export function toApiFilter(f: Filters): Record<string, string | number | (strin
   if (f.updatedFrom) out.updated_from = f.updatedFrom;
   if (f.updatedTo) out.updated_to = f.updatedTo;
   if (f.parentTask) out.parent_ticket_id = f.parentTask;
-  if (f.taskType && f.taskType !== "all") out.ticket_type = [f.taskType];
+  // ticket_type is not offered: the API takes numeric type ids it does not expose in the payload.
   return out;
 }
 
@@ -272,15 +272,6 @@ export function FilterFlyout({ open, filters, onChange, onClose, tasks, statuses
               </label>
             </div>
             <Select label="Parent Task" placeholder="Select Parent Group Task..." value={filters.parentTask} options={tasks.filter((t) => t.isParent || /parent/i.test(t.statusName)).map((t) => ({ value: String(t.id), label: t.title }))} onChange={(v) => set({ parentTask: v })} />
-            <label className="pk-field">
-              <span className="pk-field__label">Task Type</span>
-              <span className="pk-field__control">
-                <select value={filters.taskType || "all"} onChange={(e) => set({ taskType: e.target.value })}>
-                  <option value="all">All</option><option value="task">Task</option><option value="bug">Bug</option><option value="request">Request</option>
-                </select>
-                <IconChevronDown />
-              </span>
-            </label>
           </div>
         )}
       </section>

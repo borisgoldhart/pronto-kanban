@@ -73,7 +73,7 @@ function filterFixtureRows(rows, { preset, filter, identity }) {
   if (filter.status && String(filter.status) === "incomplete") out = out.filter((t) => !/^(completed|deleted|cancelled)$/i.test(t.statusName));
   if (Array.isArray(filter.status) && filter.status.some((s) => /^\d+$/.test(String(s)))) { const ids = filter.status.map(Number); out = out.filter((t) => ids.includes(t.statusId)); }
   if (filter.assignees?.length) { const ids = filter.assignees.map(Number); out = out.filter((t) => t.assignees.some((a) => ids.includes(a.id))); }
-  if (filter.tags?.length) { const tags = filter.tags.map((s) => String(s).toLowerCase()); out = out.filter((t) => t.tags.some((g) => tags.includes(g.toLowerCase()))); }
+  if (filter.tags?.length) { const tags = filter.tags.map((s) => String(s).toLowerCase()); out = out.filter((t) => t.tags.some((g) => tags.includes(g.toLowerCase())) || (t.tagIds || []).some((id) => tags.includes(String(id)))); }
   if (filter.show_escalated_ticket) out = out.filter((t) => t.escalated);
   if (filter.priority_new?.length) { const p = filter.priority_new.map(Number); out = out.filter((t) => p.includes(t.priority)); }
   if (filter.jobs?.length) { const j = filter.jobs.map(Number); out = out.filter((t) => j.includes(t.jobId)); }
@@ -178,7 +178,8 @@ router.get("/options", async (req, res) => {
     projectManagers: uniq(pmIds.map((id) => [id, pms.get(id)?.name || `User ${id}`])),
     offices: uniq(rows.map((t) => [t.clientId, t.client])),
     brands: uniq(rows.map((t) => [t.brandId, t.brand])),
-    tags: uniq(rows.flatMap((t) => t.tags.map((g) => [g, g]))),
+    // Tags filter by id on the API (filter[tags][] takes tag ids); fixtures carry names only.
+    tags: uniq(rows.flatMap((t) => t.tags.map((g, i) => [(t.tagIds && t.tagIds[i] != null) ? t.tagIds[i] : g, g]))),
     statuses: statusCatalogue(rows).map((s) => ({ id: s.id, name: s.name, color: s.color })),
   });
 });
@@ -204,12 +205,19 @@ router.get("/", async (req, res) => {
   const updatedFrom = filter.updated_from ? Date.parse(`${String(filter.updated_from).slice(0, 10)}T00:00:00`) : null;
   const updatedTo = filter.updated_to ? Date.parse(`${String(filter.updated_to).slice(0, 10)}T23:59:59`) : null;
   delete filter.updated_from; delete filter.updated_to;
+  // The API's assignees filter also matches tasks assigned to a user group the person belongs
+  // to (e.g. "Customer Support Team"), so a board filtered to one person shows other people's
+  // cards. The explicit Assigned Users filter is applied strictly after the fetch: direct
+  // assignment only. (The "Tasks Assigned to Me" preset keeps Pronto's group semantics.)
+  const strictAssignees = Array.isArray(filter.assignees) ? filter.assignees.map(Number).filter(Boolean) : (filter.assignees ? [Number(filter.assignees)] : []);
   const guard = scope === "explorer" && narrow && !userHasFiltered(preset, filter);
   const explorerDefault = guard && me?.clientId;
 
   let tasks, source, total, truncated = false;
   if (auth && !USE_FIXTURES) {
     const apiFilter = { ...presetFilter(preset, identity), ...filter };
+    // Pronto validates priority_new as a single value, not a list.
+    if (Array.isArray(apiFilter.priority_new)) apiFilter.priority_new = apiFilter.priority_new[0];
     if (scope === "project") apiFilter.jobs = [job];
     if (!apiFilter.status) apiFilter.status = ["incomplete"];      // the Task Explorer default
     if (explorerDefault) { apiFilter.clients = [me.clientId]; narrowed.office = { id: me.clientId, name: me.client }; }
@@ -227,6 +235,7 @@ router.get("/", async (req, res) => {
 
   await enrichFromJobs(auth, tasks);
   if (pmFilter.length) { tasks = tasks.filter((t) => pmFilter.includes(t.projectManagerId)); total = tasks.length; truncated = false; }
+  if (strictAssignees.length) { tasks = tasks.filter((t) => t.assignees.some((a) => strictAssignees.includes(Number(a.id)))); total = tasks.length; truncated = false; }
   if (updatedFrom || updatedTo) {
     tasks = tasks.filter((t) => { const ms = activityMs(t); return (!updatedFrom || ms >= updatedFrom) && (!updatedTo || ms <= updatedTo); });
     total = tasks.length; truncated = false;
