@@ -49,6 +49,7 @@ export function KanbanBoard({ tasks, columns, lanes, groupBy, groupKey, zoom, sh
         onRebalance: (r) => callbacksRef.current.onRebalance ? callbacksRef.current.onRebalance(r) : Promise.resolve([]),
         onReassign: (r) => callbacksRef.current.onReassign ? callbacksRef.current.onReassign(r) : Promise.resolve(),
         onOpen: (t) => callbacksRef.current.onOpen(t),
+        onHideColumn: (id) => callbacksRef.current.onHideColumn?.(id),
       },
     });
     const board = new TaskBoard(config);

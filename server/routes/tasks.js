@@ -23,7 +23,7 @@ import { Router } from "express";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { fetchTickets, fromFixtureRow, avatarUrl } from "../pronto.js";
+import { fetchTickets, listTickets, fromFixtureRow, avatarUrl } from "../pronto.js";
 import { allOverrides } from "../rank/store.js";
 import { effectiveRank } from "../rank/rank.js";
 import { statusCatalogue } from "../statuses.js";
@@ -101,6 +101,30 @@ async function enrichFromJobs(auth, tasks) {
     if (j && t.brandId == null) t.brandId = j.brandId;
     if (j && t.clientId == null) t.clientId = j.clientId;
   }
+}
+
+/**
+ * Titles of the parent tasks referenced by the loaded set. Parents in the set are free;
+ * the rest come from the tickets API by id (filter[tasks][]), a page at a time, cached
+ * in memory for the process.
+ */
+const parentTitleCache = new Map();
+async function parentTitlesFor(auth, tasks, parentIds) {
+  const out = new Map();
+  const missing = [];
+  const loaded = new Map(tasks.map((t) => [t.id, t.title]));
+  for (const id of parentIds) {
+    if (loaded.has(id)) out.set(id, loaded.get(id));
+    else if (parentTitleCache.has(id)) out.set(id, parentTitleCache.get(id));
+    else missing.push(id);
+  }
+  if (missing.length && auth && !USE_FIXTURES) {
+    for (let i = 0; i < missing.length; i += 100) {
+      const r = await listTickets(auth, { filter: { tasks: missing.slice(i, i + 100) }, limit: 100 }).catch(() => null);
+      for (const row of r?.ok ? r.rows : []) { out.set(row.id, row.title); parentTitleCache.set(row.id, row.title); }
+    }
+  }
+  return out;
 }
 
 const activityMs = (t) => (t.activity ? Date.parse(String(t.activity).replace(" ", "T")) : 0);
@@ -214,6 +238,7 @@ router.get("/", async (req, res) => {
   for (const t of tasks) if (t.projectManagerId) assigneeIds.add(t.projectManagerId);
   const users = await getUsers(auth, [...assigneeIds]);
   const parentIds = new Set(tasks.map((t) => t.parentId).filter(Boolean));
+  const parentTitles = await parentTitlesFor(auth, tasks, parentIds);
   for (const t of tasks) {
     const o = overrides.get(String(t.id));
     t.rank = effectiveRank(t, o?.rank);
@@ -228,6 +253,7 @@ router.get("/", async (req, res) => {
     }
     t.departments = [...new Map(t.assignees.filter((a) => a.departmentId).map((a) => [a.departmentId, { id: a.departmentId, name: a.department }])).values()];
     t.isParent = /^parent$/i.test(t.statusName) || parentIds.has(t.id);
+    t.parentTitle = t.parentId ? parentTitles.get(t.parentId) || null : null;
     const pm = t.projectManagerId ? users.get(t.projectManagerId) : null;
     t.projectManager = pm ? { id: pm.id, name: pm.name } : (t.projectManagerId ? { id: t.projectManagerId, name: `User ${t.projectManagerId}` } : null);
   }

@@ -33,6 +33,8 @@ export type BoardCallbacks = {
   onReassign?: (req: ReassignRequest) => Promise<void>;
   /** Open the task (double-click, menu). */
   onOpen: (task: BoardTask) => void;
+  /** The user hid a column from its header menu. */
+  onHideColumn?: (statusId: string) => void;
 };
 
 export type BoardOptions = {
@@ -72,7 +74,7 @@ const CARD_SIZES = (showProject: boolean) => [
 /** The custom fields a card reads, declared so `record.<field>` works and changes track. */
 export const TASK_FIELDS = [
   "taskId", "rank", "lane", "jobId", "jobTitle", "jobCode", "projectManager", "brand", "client", "assignees", "departments", "tags",
-  "priority", "escalated", "starred", "startDate", "endDate", "isParent", "parentId", "activity", "seeded", "statusOverridden",
+  "priority", "escalated", "starred", "startDate", "endDate", "isParent", "parentTaskId", "parentTitle", "activity", "seeded", "statusOverridden",
 ];
 
 export function toTaskData(t: BoardTask): Record<string, unknown> {
@@ -154,8 +156,10 @@ export function buildBoardConfig(el: HTMLElement, opts: BoardOptions): Partial<T
       simpleTaskEdit: false,
       columnToolbars: false,
       columnLock: false,
-      // Hover preview (BR-12): the lightweight inspection step before Task Detail.
+      // Hover preview (BR-12): the lightweight inspection step before Task Detail. The delay
+      // keeps it out of the way while dragging; resting on a card for 1.4s is deliberate.
       taskTooltip: {
+        tooltip: { hoverDelay: 1400 },
         template: ({ taskRecord, columnRecord }) => {
           const col = columnById.get(String(columnRecord?.id)) || { text: String(columnRecord?.text || ""), color: String(columnRecord?.color || "#999") };
           return cardPreview(asTask(taskRecord), col.text, col.color);
@@ -167,8 +171,13 @@ export function buildBoardConfig(el: HTMLElement, opts: BoardOptions): Partial<T
           openTask: { text: "Open in Pronto", icon: "b-fa b-fa-arrow-up-right-from-square", weight: 100, onItem: ({ taskRecord }: { taskRecord?: unknown }) => { if (taskRecord) callbacks.onOpen(asTask(taskRecord as TaskModel)); } },
         },
       },
-      // Columns are chosen from the Columns menu in the control strip; no per-column menu.
-      columnHeaderMenu: false,
+      // Column header ellipsis: hide this column (the Columns menu in the strip brings it back).
+      columnHeaderMenu: {
+        items: {
+          addTask: false, moveColumnLeft: false, moveColumnRight: false,
+          hideColumn: { text: "Hide column", icon: "b-fa b-fa-eye-slash", weight: 100, onItem: ({ columnRecord }: { columnRecord?: unknown }) => { if (columnRecord) callbacks.onHideColumn?.(String((columnRecord as ColumnModel).id)); } },
+        },
+      },
     },
     listeners: {
       swimlaneExpand: ({ source, swimlaneRecord }) => laneSource?.expand(source as TaskBoard, String(swimlaneRecord.id)),

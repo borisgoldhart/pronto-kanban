@@ -40,7 +40,8 @@ export type BoardTask = {
   startDate: string | null;
   endDate: string | null;
   isParent: boolean;
-  parentId: number | null;
+  parentTaskId: number | null;   // not "parentId": Bryntum's Model reserves that for tree stores
+  parentTitle: string | null;
   activity: string | null;
   seeded: boolean;
   statusOverridden: boolean;
@@ -96,7 +97,8 @@ function base(t: ProntoTask): Omit<BoardTask, "id" | "lane"> {
     startDate: t.startDate,
     endDate: t.endDate,
     isParent: Boolean(t.isParent),
-    parentId: t.parentId,
+    parentTaskId: t.parentId,
+    parentTitle: t.parentTitle || null,
     activity: t.activity,
     seeded: t.seeded,
     statusOverridden: Boolean(t.statusOverridden),

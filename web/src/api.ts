@@ -34,6 +34,7 @@ export type ProntoTask = {
   escalated: boolean;
   starred: boolean;
   parentId: number | null;
+  parentTitle?: string | null;
   activity: string | null;
   sparseIndex: number | null;
   progress: number;

@@ -117,8 +117,9 @@
 .pk-board-host .pk-board--lazy .b-task-board-column-count { display: none; }
 .pk-board-host .pk-col-count { margin-left: auto; }
 .pk-board-host .pk-board--lazy .b-task-board-column-title { display: flex; align-items: center; gap: 0.6em; flex: 1 1 auto; }
-.pk-board-host .b-task-board-column-header .b-task-board-column-header-menu-button,
 .pk-board-host .b-task-board-column-header .b-task-board-column-expander { display: none; }
+.pk-board-host .b-task-board-column-header .b-task-board-column-header-menu-button { color: var(--pk-muted); }
+.pk-board-host .b-task-board-column-header .b-task-board-column-header-menu-button:hover { color: var(--pk-ink); }
 .pk-board-host .b-task-board-column-header.b-colorize { background: #fff; color: var(--pk-ink); }
 
 /* ---- cards --------------------------------------------------- */
@@ -152,6 +153,8 @@
 .pk-chip { display: inline-flex; align-items: center; gap: 0.35em; padding: 0.18em 0.55em; border-radius: 999px; border: 1px solid var(--pk-line); background: #fff; font-weight: 700; font-size: 0.95em; line-height: 1.3; white-space: nowrap; color: #4b5563; }
 .pk-chip--id { color: #4b5563; }
 .pk-chip--job { max-width: 9em; overflow: hidden; text-overflow: ellipsis; display: inline-block; }
+.pk-chip--child { color: #0f6e56; background: #e6f4ef; border-color: transparent; }
+.pk-chip--parent { color: #4b5563; }
 .pk-prio { border-color: transparent; }
 .pk-prio--1 { background: #fde2e2; color: #b42318; }
 .pk-prio--2 { background: #fff1c2; color: #7a5a00; }

@@ -244,7 +244,8 @@ export function TaskWorkspace({ scope, job, boardKey, title, prontoBase, groupOp
       setNotice(toUserId ? `Task ${taskId} reassigned to ${toUserName}.` : `Task ${taskId} unassigned.`);
     },
     onOpen: (t: BoardTask) => { if (t.jobId) window.open(`${prontoBase}/v2/passport/${t.jobId}/tasklist/${t.taskId}`, "_blank", "noopener"); },
-  }), [statuses, prontoBase]);
+    onHideColumn: (id) => setHidden((cur) => { const next = new Set(cur ?? hiddenSet); next.add(Number(id)); return next; }),
+  }), [statuses, prontoBase, hiddenSet]);
 
   const toggleStatus = (id: number) => setHidden((cur) => { const next = new Set(cur ?? hiddenSet); if (next.has(id)) next.delete(id); else next.add(id); return next; });
 
