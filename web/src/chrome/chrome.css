@@ -16,9 +16,15 @@
 /* The page scrolls; the board itself has a fixed height (see .pk-board-area) with its own scrollbars. */
 html, body { min-height: 100%; }
 body { display: flex; flex-direction: column; }
-#root { display: flex; flex-direction: column; }   /* no min-height: the page is as tall as its content */
-/* Measured on Beta's Task Explorer at 1800px: 40px gutters, banner 20px below the nav, 13px Lato body. */
-.pk-page { display: flex; flex-direction: column; flex: 1 1 auto; padding-top: 20px; padding-bottom: 12px; max-width: none; font-size: 13px; }
+#root { display: flex; flex-direction: column; min-width: 0; }   /* no min-height: the page is as tall as its content */
+/* Page shell, as on Beta: a single content column, fixed 40px gutters left and right,
+   centred and capped at the pronto-base page width. The width comes from here and never
+   from the content: .pp-page's auto margins leave an unsized flex item shrink-to-fit, which
+   is what let the board and the list change the page width as data loaded. Everything below
+   keeps min-width: 0, so a wide board or table scrolls inside its own area instead of
+   stretching the page. Measured on Beta's Task Explorer: 40px gutters, banner 20px below
+   the nav, 13px Lato body. */
+.pk-page { display: flex; flex-direction: column; flex: 1 1 auto; width: 100%; min-width: 0; max-width: var(--pk-page-width, 1920px); margin: 0 auto; padding: 20px var(--pp-gutter, 40px) 12px; font-size: 13px; }
 .pk-loading-page { padding: 48px 40px; color: var(--pk-muted); }
 
 /* ---- banner (Inbox / project) -------------------------------------------- */
@@ -42,7 +48,7 @@ body { display: flex; flex-direction: column; }
 .pk-tab.is-active::after { content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; background: var(--pk-ink); }
 
 /* ---- workspace layout ------------------------------------------------------ */
-.pk-workspace { display: grid; grid-template-columns: 232px minmax(0, 1fr); gap: 20px; flex: 1 1 auto; align-items: start; }
+.pk-workspace { display: grid; grid-template-columns: 232px minmax(0, 1fr); gap: 20px; flex: 1 1 auto; align-items: start; min-width: 0; }
 .pk-card { background: #fff; border: 1px solid var(--pk-line); border-radius: 4px; }
 .pk-main { display: flex; flex-direction: column; min-height: 0; min-width: 0; }
 
@@ -159,14 +165,14 @@ body { display: flex; flex-direction: column; }
 /* ---- board area ------------------------------------------------------------ */
 /* The board is sized to end just above the bottom of the browser window (TaskWorkspace sets
    --pk-board-height from the viewport), so its horizontal scrollbar is always in view. */
-.pk-board-area { position: relative; display: flex; flex-direction: column; flex: none; height: var(--pk-board-height, 800px); min-height: 0; padding: 12px 12px 10px; }
+.pk-board-area { position: relative; display: flex; flex-direction: column; flex: none; height: var(--pk-board-height, 800px); min-height: 0; min-width: 0; padding: 12px 12px 10px; }
 .pk-board-area.is-loading .pk-board-host { opacity: .55; }
 .pk-loading { position: absolute; top: 18px; left: 50%; transform: translateX(-50%); padding: 6px 14px; border-radius: 999px; background: #fff; border: 1px solid var(--pk-line); font-size: 12.5px; color: var(--pk-muted); box-shadow: 0 4px 12px rgba(0,0,0,.08); }
 .pk-alert { margin: 10px 16px 0; padding: 8px 12px; border-radius: 4px; font-size: 12px; background: #e8f1fb; border: 1px solid #c5dcf3; color: #1b4f7f; }
 .pk-alert--error { background: #fdf0f0; border-color: #f0c4c4; color: #b4432f; font-weight: 600; }
 
 /* ---- list view ------------------------------------------------------------- */
-.pk-list { overflow: auto; flex: 1 1 auto; }
+.pk-list { overflow: auto; flex: 1 1 auto; min-width: 0; }
 .pk-list table { width: 100%; border-collapse: collapse; font-size: 12px; }
 .pk-list th, .pk-list td { text-align: left; padding: 11px 12px; border-bottom: 1px solid var(--pk-line-soft); vertical-align: top; }
 .pk-list th { font-size: 12px; font-weight: 500; text-transform: capitalize; color: #626166; }
