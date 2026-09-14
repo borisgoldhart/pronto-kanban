@@ -4,7 +4,8 @@
  *   2. meta: task id, project code, priority; assignee avatars on the right
  *
  * Returned as HTML strings for TaskBoard `template` items; every data value goes
- * through encodeHtml. Styling lives in kanban.css (.pk-card-*).
+ * through encodeHtml. Styling lives in kanban.css (.pk-card-*). Cards carry no native
+ * `title` attributes: the delayed hover preview (TaskTooltip) is the only hover.
  */
 import { StringHelper } from "@bryntum/taskboard";
 import type { BoardTask } from "./model";
@@ -39,10 +40,10 @@ function avatarHue(name: string): number {
  * Initials in a coloured circle. No image: a board of 1,500 cards would otherwise fire
  * 1,500 avatar requests, and the initials are what people scan anyway.
  */
-export function avatarHtml(a: { name: string; avatarUrl?: string | null }, size = 22): string {
+export function avatarHtml(a: { name: string; avatarUrl?: string | null }, size = 22, withTitle = false): string {
   const alt = enc(a.name);
   const hue = avatarHue(a.name);
-  return `<span class="pk-avatar pk-avatar--fallback" title="${alt}" style="width:${size}px;height:${size}px;background:hsl(${hue} 45% 86%);color:hsl(${hue} 40% 28%)"><span class="pk-avatar__initials">${enc(initials(a.name))}</span></span>`;
+  return `<span class="pk-avatar pk-avatar--fallback"${withTitle ? ` title="${alt}"` : ""} aria-label="${alt}" style="width:${size}px;height:${size}px;background:hsl(${hue} 45% 86%);color:hsl(${hue} 40% 28%)"><span class="pk-avatar__initials">${enc(initials(a.name))}</span></span>`;
 }
 
 export type CardSize = "large" | "medium" | "small";
@@ -59,7 +60,7 @@ export function cardTitle(task: BoardTask, size: CardSize = "large"): string {
   }
   return `<div class="pk-card-title pk-card-title--${size}">
     <span class="pk-card-title__text">${enc(task.name)}</span>
-    ${task.escalated ? `<span class="pk-flag pk-flag--escalated" title="Escalated">${ICON_FLAME}</span>` : ""}
+    ${task.escalated ? `<span class="pk-flag pk-flag--escalated" aria-label="Escalated">${ICON_FLAME}</span>` : ""}
   </div>`;
 }
 
@@ -76,17 +77,17 @@ export function cardMeta(task: BoardTask, opts: { showProject?: boolean; size?: 
   const maxAvatars = size === "large" ? 3 : size === "medium" ? 2 : 1;
   const avatars = task.assignees.slice(0, maxAvatars).map((a) => avatarHtml(a)).join("");
   const rest = task.assignees.slice(maxAvatars);
-  const extra = rest.length ? `<span class="pk-avatar pk-avatar--more" title="${enc(rest.map((a) => a.name).join(", "))}"><span class="pk-avatar__initials">+${rest.length}</span></span>` : "";
+  const extra = rest.length ? `<span class="pk-avatar pk-avatar--more" aria-label="${enc(rest.map((a) => a.name).join(", "))}"><span class="pk-avatar__initials">+${rest.length}</span></span>` : "";
   const parentLabel = task.parentTitle ? `Subtask of: ${task.parentTitle}` : `Subtask of #${task.parentTaskId}`;
   const family = task.isParent
-    ? `<span class="pk-chip pk-chip--parent" title="Parent task">${ICON_PARENT}${size === "large" ? "<span>Parent</span>" : ""}</span>`
-    : task.parentTaskId ? `<span class="pk-chip pk-chip--child" title="${enc(parentLabel)}">${ICON_CHILD}</span>` : "";
+    ? `<span class="pk-chip pk-chip--parent" aria-label="Parent task">${ICON_PARENT}${size === "large" ? "<span>Parent</span>" : ""}</span>`
+    : task.parentTaskId ? `<span class="pk-chip pk-chip--child" aria-label="${enc(parentLabel)}">${ICON_CHILD}</span>` : "";
   return `<div class="pk-card-meta pk-card-meta--${size}">
-    <span class="pk-chip pk-chip--id" title="Task #${enc(task.taskId)}">${size === "small" ? "" : ICON_TASK}<span>${enc(task.taskId)}</span></span>
-    ${size === "large" && opts.showProject !== false && task.jobCode ? `<span class="pk-chip pk-chip--job" title="${enc(task.jobTitle)}">${enc(task.jobCode)}</span>` : ""}
+    <span class="pk-chip pk-chip--id">${size === "small" ? "" : ICON_TASK}<span>${enc(task.taskId)}</span></span>
+    ${size === "large" && opts.showProject !== false && task.jobCode ? `<span class="pk-chip pk-chip--job">${enc(task.jobCode)}</span>` : ""}
     ${prio ? `<span class="pk-chip pk-prio ${prio.cls}">${prio.label}</span>` : ""}
     ${size === "small" ? "" : family}
-    ${size === "large" && task.starred ? `<span class="pk-flag pk-flag--starred" title="Starred">${ICON_STAR}</span>` : ""}
+    ${size === "large" && task.starred ? `<span class="pk-flag pk-flag--starred" aria-label="Starred">${ICON_STAR}</span>` : ""}
     <span class="pk-card-meta__spacer"></span>
     <span class="pk-avatars">${avatars}${extra}</span>
   </div>`;
