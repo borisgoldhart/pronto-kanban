@@ -9,7 +9,7 @@
  *   POST /api/kanban/assign      { taskId, assignees: [{id,name,avatar}], origin? } -> the task's
  *                                assignee list after a drag between User swim lanes (BR-07).
  *   GET  /api/kanban/prefs/:board
- *   PUT  /api/kanban/prefs/:board   { hiddenStatuses, groupBy, zoom }
+ *   PUT  /api/kanban/prefs/:board   { hiddenStatuses, shownStatuses, groupBy }
  *   GET  /api/kanban/views          the user's saved views (BR-08/09)
  *   POST /api/kanban/views          { name, board, state } -> { id, url }
  *   GET  /api/kanban/views/:id      one view (shareable by URL; data access stays per user)
@@ -92,6 +92,7 @@ router.put("/prefs/:board", async (req, res) => {
   const body = req.body || {};
   const prefs = {
     hiddenStatuses: Array.isArray(body.hiddenStatuses) ? body.hiddenStatuses.map(Number) : undefined,
+    shownStatuses: Array.isArray(body.shownStatuses) ? body.shownStatuses.map(Number) : undefined,   // default-hidden statuses the user chose to show
     groupBy: typeof body.groupBy === "string" ? body.groupBy : undefined,
     zoom: typeof body.zoom === "number" ? body.zoom : undefined,
   };

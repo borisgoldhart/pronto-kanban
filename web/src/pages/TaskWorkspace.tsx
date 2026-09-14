@@ -86,7 +86,11 @@ export function TaskWorkspace({ scope, job, boardKey, title, prontoBase, groupOp
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [view, setView] = useState<"list" | "kanban">("kanban");
   const [groupBy, setGroupBy] = useState<GroupBy>(defaultGroupBy);
-  const [hidden, setHidden] = useState<Set<number> | null>(null);       // null = use defaults
+  // Column visibility = defaults (Completed, Cancelled, Deleted, Parent hidden) + the user's explicit
+  // hides and shows. Kept as two override lists so a default-hidden status (Parent) stays hidden
+  // even when it first appears after the preferences were saved.
+  const [hiddenOverride, setHiddenOverride] = useState<Set<number>>(new Set());
+  const [shownOverride, setShownOverride] = useState<Set<number>>(new Set());
   const [laneRequest, setLaneRequest] = useState<{ collapsed: boolean; seq: number } | null>(null);
   const [options, setOptions] = useState<FilterOptions | null>(null);
   const [narrow, setNarrow] = useState(true);                            // BR-10 guardrails on
@@ -112,7 +116,8 @@ export function TaskWorkspace({ scope, job, boardKey, title, prontoBase, groupOp
       try {
         const r = await api.prefs(boardKey);
         if (!alive) return;
-        if (r.prefs?.hiddenStatuses) setHidden(new Set(r.prefs.hiddenStatuses));
+        if (r.prefs?.hiddenStatuses) setHiddenOverride(new Set(r.prefs.hiddenStatuses));
+        if (r.prefs?.shownStatuses) setShownOverride(new Set(r.prefs.shownStatuses));
         if (r.prefs?.groupBy && GROUP_OPTIONS.some((g) => g.id === r.prefs?.groupBy)) setGroupBy(r.prefs.groupBy as GroupBy);
       } catch { /* defaults */ }
       try { const o = await api.filterOptions(); if (alive) setOptions(o); } catch { /* the flyout falls back to the loaded data */ }
@@ -131,18 +136,19 @@ export function TaskWorkspace({ scope, job, boardKey, title, prontoBase, groupOp
     if (!prefsLoaded) return;
     if (saveTimer.current) window.clearTimeout(saveTimer.current);
     saveTimer.current = window.setTimeout(() => {
-      api.savePrefs(boardKey, { hiddenStatuses: hidden ? [...hidden] : undefined, groupBy }).catch(() => { /* best effort */ });
+      api.savePrefs(boardKey, { hiddenStatuses: [...hiddenOverride], shownStatuses: [...shownOverride], groupBy }).catch(() => { /* best effort */ });
     }, 400);
-  }, [hidden, groupBy, boardKey, prefsLoaded]);
+  }, [hiddenOverride, shownOverride, groupBy, boardKey, prefsLoaded]);
 
   function currentViewState(): ViewState {
-    return { preset, q: search, filters, hiddenStatuses: hidden ? [...hidden] : undefined, groupBy, narrow };
+    return { preset, q: search, filters, hiddenStatuses: [...hiddenOverride], shownStatuses: [...shownOverride], groupBy, narrow };
   }
   function applyView(state: ViewState, id: string | null) {
     if (state.preset) setPreset(state.preset);
     setSearch(state.q || "");
     setFilters(normaliseFilters(state.filters));
-    if (state.hiddenStatuses) setHidden(new Set(state.hiddenStatuses));
+    if (state.hiddenStatuses) setHiddenOverride(new Set(state.hiddenStatuses));
+    if (state.shownStatuses) setShownOverride(new Set(state.shownStatuses));
     if (state.groupBy && GROUP_OPTIONS.some((g) => g.id === state.groupBy)) setGroupBy(state.groupBy as GroupBy);
     if (typeof state.narrow === "boolean") setNarrow(state.narrow);
     setActiveView(id);
@@ -215,7 +221,12 @@ export function TaskWorkspace({ scope, job, boardKey, title, prontoBase, groupOp
 
   /* ---- board inputs ---------------------------------------------------------- */
   const visibleTasks = useMemo(() => (q ? tasks.filter((t) => matchesSearch(t, q)) : tasks), [tasks, q]);
-  const hiddenSet = useMemo(() => hidden ?? new Set(statuses.filter((s) => s.hiddenByDefault).map((s) => s.id)), [hidden, statuses]);
+  const hiddenSet = useMemo(() => {
+    const set = new Set<number>(statuses.filter((s) => s.hiddenByDefault).map((s) => s.id));
+    for (const id of hiddenOverride) set.add(id);
+    for (const id of shownOverride) set.delete(id);
+    return set;
+  }, [hiddenOverride, shownOverride, statuses]);
   // Grouped views: a status with no task in the loaded set would be an empty column in
   // every lane, and TaskBoard's cost grows with lanes x columns, so those columns are
   // left out (the Columns menu still lists them with a count of 0).
@@ -252,10 +263,15 @@ export function TaskWorkspace({ scope, job, boardKey, title, prontoBase, groupOp
       setNotice(toUserId ? `Task ${taskId} reassigned to ${toUserName}.` : `Task ${taskId} unassigned.`);
     },
     onOpen: (t: BoardTask) => { if (t.jobId) window.open(`${prontoBase}/v2/passport/${t.jobId}/tasklist/${t.taskId}`, "_blank", "noopener"); },
-    onHideColumn: (id) => setHidden((cur) => { const next = new Set(cur ?? hiddenSet); next.add(Number(id)); return next; }),
-  }), [statuses, prontoBase, hiddenSet]);
+    onHideColumn: (id) => setColumnVisible(Number(id), false),
+  }), [statuses, prontoBase]);
 
-  const toggleStatus = (id: number) => setHidden((cur) => { const next = new Set(cur ?? hiddenSet); if (next.has(id)) next.delete(id); else next.add(id); return next; });
+  function setColumnVisible(id: number, visible: boolean) {
+    setHiddenOverride((cur) => { const next = new Set(cur); if (visible) next.delete(id); else next.add(id); return next; });
+    setShownOverride((cur) => { const next = new Set(cur); if (visible) next.add(id); else next.delete(id); return next; });
+  }
+  const toggleStatus = (id: number) => setColumnVisible(id, hiddenSet.has(id));
+  const showAllStatuses = () => { setHiddenOverride(new Set()); setShownOverride(new Set(statuses.map((s) => s.id))); };
 
   const resetOrder = async () => {
     if (!window.confirm("Reset the Kanban order for every task back to the seeded order (priority, due date, then newest first)?")) return;
@@ -281,7 +297,7 @@ export function TaskWorkspace({ scope, job, boardKey, title, prontoBase, groupOp
           groupBy={groupBy} onGroupBy={setGroupBy} groupOptions={groupOptions}
           onExpandAll={() => setLaneRequest((r) => ({ collapsed: false, seq: (r?.seq || 0) + 1 }))}
           onCollapseAll={() => setLaneRequest((r) => ({ collapsed: true, seq: (r?.seq || 0) + 1 }))}
-          statuses={statuses} hidden={hiddenSet} onToggleStatus={toggleStatus} onShowAllStatuses={() => setHidden(new Set())}
+          statuses={statuses} hidden={hiddenSet} onToggleStatus={toggleStatus} onShowAllStatuses={showAllStatuses}
           filtersOpen={filtersOpen} filterCount={countActive(filters)} onToggleFilters={() => setFiltersOpen((v) => !v)}
           onResetOrder={resetOrder} onReload={() => load()} onSaveView={saveCurrentView} source={meta.source} live={live}
         />

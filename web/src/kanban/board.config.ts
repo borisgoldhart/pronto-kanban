@@ -48,8 +48,30 @@ export type BoardOptions = {
   callbacks: BoardCallbacks;
 };
 
-/** Column width; one card per row (the zoom / card size selector was removed at Richard's request). */
+/**
+ * Column width. One card per row. Columns are 300px on a wide screen; on a narrower
+ * board they shrink (to 200px at least) so that five columns fit, and below MEDIUM_BREAK
+ * the card switches to the medium template through TaskBoard's `cardSizes` (fewer chips,
+ * two avatars). See `fitColumns` and KanbanBoard.tsx.
+ */
 export const COLUMN_WIDTH = 300;
+export const COLUMN_MIN_WIDTH = 180;
+export const COLUMNS_TO_FIT = 5;
+export const COLUMN_GAP = 11;              // --b-task-board-column-gap (0.85em at 13px)
+const MEDIUM_BREAK = 266;                  // column width below which cards use the medium template
+
+/** Width for the columns so that COLUMNS_TO_FIT of them fit in `boardWidth`, within the limits. */
+export function fitColumns(boardWidth: number): number {
+  if (!boardWidth) return COLUMN_WIDTH;
+  const w = Math.floor((boardWidth - COLUMN_GAP * (COLUMNS_TO_FIT - 1) - 12) / COLUMNS_TO_FIT);
+  return Math.max(COLUMN_MIN_WIDTH, Math.min(COLUMN_WIDTH, w));
+}
+
+/** Card template per card width (one card per row, so card width tracks column width). */
+const CARD_SIZES = (showProject: boolean) => [
+  { name: "medium", maxWidth: MEDIUM_BREAK - 16, maxAvatars: 2, headerItems: { text: { template: ({ taskRecord }: { taskRecord: TaskModel }) => cardTitle(asTask(taskRecord), "medium") } }, bodyItems: { meta: { template: ({ taskRecord }: { taskRecord: TaskModel }) => cardMeta(asTask(taskRecord), { showProject, size: "medium" }) } } },
+  { name: "large", maxAvatars: 3 },
+];
 
 /** The custom fields a card reads, declared so `record.<field>` works and changes track. */
 export const TASK_FIELDS = [
@@ -105,7 +127,7 @@ export function buildBoardConfig(el: HTMLElement, opts: BoardOptions): Partial<T
     columnField: "status",
     swimlaneField: useLanes ? "lane" : undefined,
     // Column headers: the status pill and count only (no collapse chevron, no menu).
-    columns: opts.columns.map((c) => ({ id: c.id, text: c.text, color: c.color, hidden: c.hidden, width: opts.columnWidth ?? COLUMN_WIDTH, minWidth: 220, htmlEncodeHeaderText: false, collapsible: false })),
+    columns: opts.columns.map((c) => ({ id: c.id, text: c.text, color: c.color, hidden: c.hidden, width: opts.columnWidth ?? COLUMN_WIDTH, minWidth: COLUMN_MIN_WIDTH, htmlEncodeHeaderText: false, collapsible: false })),
     swimlanes: useLanes ? opts.lanes.map((l) => ({ id: l.id, text: l.text, collapsible: true, collapsed: opts.collapsedLanes?.has(l.id) ?? false })) : undefined,
     // Header counts come from the full task list, not from what is loaded (lazy lanes render
     // their own column count next to the pill; Bryntum's store-based one is hidden by CSS).
@@ -116,6 +138,7 @@ export function buildBoardConfig(el: HTMLElement, opts: BoardOptions): Partial<T
     showCollapseInHeader: true,        // swimlanes only: columns are not collapsible and their header icons are hidden
     stickyHeaders: true,
     tasksPerRow: 1,
+    cardSizes: CARD_SIZES(opts.showProjectOnCards) as unknown as TaskBoardConfig["cardSizes"],
     stretchCards: true,
     virtualize: !useLanes && initialTasks.length > 400,   // virtualised column bodies mis-size expanded swimlanes; lanes stay unvirtualised
     useDomTransition: false,
@@ -172,7 +195,9 @@ export function buildBoardConfig(el: HTMLElement, opts: BoardOptions): Partial<T
       swimlaneCollapse: ({ source, swimlaneRecord }) => laneSource.collapse(source as TaskBoard, String(swimlaneRecord.id)),
       taskDragStart: ({ taskRecords }) => { for (const r of taskRecords) { const t = asTask(r); dragOrigin.set(r, { status: String(t.status), lane: String(t.lane) }); } },
       // Vertical moves: only User lanes have a business meaning (reassignment).
-      beforeTaskDrop: ({ taskRecords, targetSwimlane }) => {
+      beforeTaskDrop: ({ taskRecords, targetColumn, targetSwimlane }) => {
+        // The Parent status is a container, not a workflow step: nothing is dropped into it.
+        if (targetColumn && columnById.get(String(targetColumn.id))?.isParent) return false;
         if (!targetSwimlane) return true;
         if (groupBy === "user") return true;
         return taskRecords.every((r) => asTask(r).lane === String(targetSwimlane.id));

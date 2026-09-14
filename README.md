@@ -101,8 +101,13 @@ field is set to the rank, so Bryntum's ordering and the persisted order never di
   endpoints replace this in the product.
 - Columns: derived from the statuses present in the loaded tasks (id, name, colour),
   ordered by the workflow order in `server/statuses.js`. Completed / Cancelled / Deleted /
-  Parent are hidden by default; the Columns menu in the control strip changes that, saved
-  per user per board. Column headers carry no menu or collapse control.
+  Parent are hidden by default; the Columns menu (and the column header menu) change
+  that, saved per user per board as explicit hide / show overrides on top of the defaults,
+  so a default-hidden status stays hidden even when it first appears later. The Parent
+  status is a container: nothing can be dropped into its column.
+- Column width: 300px when five columns fit the board; otherwise the columns shrink (to
+  180px at least) so five fit, and below 266px the cards switch to the medium template
+  (`cardSizes`): `fitColumns` in `board.config.ts`, applied on resize by `KanbanBoard.tsx`.
 - Board height follows the window: the board ends just above the bottom of the browser so
   its horizontal scrollbar is always in view (`useFitToViewport` in `TaskWorkspace.tsx`).
 

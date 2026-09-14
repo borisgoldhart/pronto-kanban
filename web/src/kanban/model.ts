@@ -47,7 +47,7 @@ export type BoardTask = {
   statusOverridden: boolean;
 };
 
-export type BoardColumn = { id: string; text: string; color: string; hidden: boolean; count: number };
+export type BoardColumn = { id: string; text: string; color: string; hidden: boolean; count: number; isParent?: boolean };
 export type BoardLane = { id: string; text: string };
 
 export const UNASSIGNED_LANE = "__unassigned";
@@ -124,6 +124,7 @@ export function toColumns(statuses: StatusInfo[], hidden: Set<number> | null): B
     text: s.name,
     color: s.color,
     hidden: hidden ? hidden.has(s.id) : s.hiddenByDefault,
+    isParent: Boolean(s.isParent),
     count: s.count,
   }));
 }

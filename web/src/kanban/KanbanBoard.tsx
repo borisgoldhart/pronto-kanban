@@ -12,7 +12,7 @@
  */
 import { useEffect, useLayoutEffect, useRef, type MutableRefObject } from "react";
 import { TaskBoard, type ColumnModel, type TaskModel } from "@bryntum/taskboard";
-import { attachLaneSource, buildBoardConfig, setAllLanesCollapsed, setBoardTasks, type BoardCallbacks } from "./board.config";
+import { attachLaneSource, buildBoardConfig, fitColumns, setAllLanesCollapsed, setBoardTasks, type BoardCallbacks } from "./board.config";
 import type { BoardColumn, BoardLane, BoardTask, GroupBy } from "./model";
 import "./kanban.css";
 
@@ -41,7 +41,7 @@ export function KanbanBoard({ tasks, columns, lanes, groupBy, groupKey, showProj
     const el = hostRef.current;
     if (!el) return;
     const config = buildBoardConfig(el, {
-      tasks, columns, lanes, groupBy, showProjectOnCards, collapsedLanes,
+      tasks, columns, lanes, groupBy, showProjectOnCards, collapsedLanes, columnWidth: fitColumns(el.clientWidth),
       callbacks: {
         onMove: (r) => callbacksRef.current.onMove(r),
         onRebalance: (r) => callbacksRef.current.onRebalance ? callbacksRef.current.onRebalance(r) : Promise.resolve([]),
@@ -78,6 +78,25 @@ export function KanbanBoard({ tasks, columns, lanes, groupBy, groupKey, showProj
       if (rec && rec.hidden !== c.hidden) rec.hidden = c.hidden;
     }
   }, [columns, groupKey]);
+
+  // Responsive columns: shrink them (down to a minimum) so five fit the board; cardSizes
+  // switches the card template to medium when they get narrow.
+  useEffect(() => {
+    const el = hostRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    let last = -1;
+    const apply = () => {
+      const board = localRef.current;
+      if (!board) return;
+      const w = fitColumns(el.clientWidth);
+      if (w === last) return;
+      last = w;
+      board.columns.forEach((rec) => { const c = rec as unknown as ColumnModel; if (c.width !== w) c.width = w; });
+    };
+    const ro = new ResizeObserver(apply);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [groupKey]);
 
   // Expand all / Collapse all (each click is a new request, so repeats still apply)
   useEffect(() => {

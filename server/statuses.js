@@ -33,6 +33,9 @@ export function statusCatalogue(tasks) {
     const ib = orderIndex.get(b.name.toLowerCase()) ?? 999;
     return ia - ib || a.name.localeCompare(b.name);
   });
-  for (const s of list) s.hiddenByDefault = HIDDEN_BY_DEFAULT.has(s.name.toLowerCase());
+  for (const s of list) {
+    s.hiddenByDefault = HIDDEN_BY_DEFAULT.has(s.name.toLowerCase()) || /^parent\b/i.test(s.name);
+    s.isParent = /^parent\b/i.test(s.name);   // container status: never a drop target
+  }
   return list;
 }
