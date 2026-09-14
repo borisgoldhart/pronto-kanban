@@ -261,6 +261,7 @@ router.get("/", async (req, res) => {
     t.rank = effectiveRank(t, o?.rank);
     t.seeded = !(typeof o?.rank === "number");
     if (o?.status) { t.statusId = o.status.id; t.statusName = o.status.name; t.statusColor = o.status.color; t.statusOverridden = true; }
+    if (typeof o?.priority === "number") t.priority = o.priority;
     for (const a of t.assignees) {
       const u = users.get(a.id);
       a.avatarUrl = avatarUrl(auth, a.avatar);

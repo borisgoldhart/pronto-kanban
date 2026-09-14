@@ -36,12 +36,13 @@ function disableOverflowTooltip() {
 }
 import { cardMeta, cardPreview, cardTitle, statusPill } from "./card";
 import { rankBetween } from "./rank";
-import { UNASSIGNED_LANE, type BoardColumn, type BoardLane, type BoardTask, type GroupBy } from "./model";
+import { UNASSIGNED_LANE, priorityOfLane, type BoardColumn, type BoardLane, type BoardTask, type GroupBy } from "./model";
 import { LaneSource, isMoreCard, setCountInDomConfig } from "./lanes";
 
 export type MoveRequest = { taskId: number; fromStatus: string; statusId: string; prevRank: number | null; nextRank: number | null };
 export type MoveResponse = { rank: number; rebalance: boolean };
 export type ReassignRequest = { taskId: number; fromUserId: number | null; toUserId: number | null; toUserName: string; assignees: BoardTask["assignees"] };
+export type PriorityRequest = { taskId: number; fromPriority: number; priority: number };
 
 export type BoardCallbacks = {
   /** Persist one drop. Return the authoritative rank. */
@@ -50,6 +51,8 @@ export type BoardCallbacks = {
   onRebalance?: (ranks: { id: number; rank: number }[]) => Promise<{ id: number; rank: number }[]>;
   /** A card was dragged between User lanes: persist the new assignee list. */
   onReassign?: (req: ReassignRequest) => Promise<void>;
+  /** A card was dragged between Priority lanes: persist the new priority. */
+  onSetPriority?: (req: PriorityRequest) => Promise<void>;
   /** Open the task (double-click, menu). */
   onOpen: (task: BoardTask) => void;
   /** The user hid a column from its header menu. */
@@ -213,12 +216,13 @@ export function buildBoardConfig(el: HTMLElement, opts: BoardOptions): Partial<T
       swimlaneExpand: ({ source, swimlaneRecord }) => laneSource.expand(source as TaskBoard, String(swimlaneRecord.id)),
       swimlaneCollapse: ({ source, swimlaneRecord }) => laneSource.collapse(source as TaskBoard, String(swimlaneRecord.id)),
       taskDragStart: ({ taskRecords }) => { for (const r of taskRecords) { const t = asTask(r); dragOrigin.set(r, { status: String(t.status), lane: String(t.lane) }); } },
-      // Vertical moves: only User lanes have a business meaning (reassignment).
+      // Vertical moves: User lanes (reassignment) and Priority lanes (priority change) have a
+      // business meaning; Department and Project lanes do not, so a card stays in its lane there.
       beforeTaskDrop: ({ taskRecords, targetColumn, targetSwimlane }) => {
         // The Parent status is a container, not a workflow step: nothing is dropped into it.
         if (targetColumn && columnById.get(String(targetColumn.id))?.isParent) return false;
         if (!targetSwimlane) return true;
-        if (groupBy === "user") return true;
+        if (groupBy === "user" || groupBy === "priority") return true;
         return taskRecords.every((r) => asTask(r).lane === String(targetSwimlane.id));
       },
       taskDrop: async ({ source, taskRecords, targetColumn, targetSwimlane }) => {
@@ -244,6 +248,16 @@ export function buildBoardConfig(el: HTMLElement, opts: BoardOptions): Partial<T
             if (twin) continue;   // the surviving twin keeps its rank and status
           }
 
+          // 1b. Priority when the card crossed Priority lanes (a task is in exactly one lane, so no twin).
+          if (groupBy === "priority" && lane !== null && lane !== origin.lane && callbacks.onSetPriority) {
+            const priority = priorityOfLane(lane);
+            record.set({ priority, lane });
+            laneSource.relane(task.id, lane);
+            try { await callbacks.onSetPriority({ taskId: task.taskId, fromPriority: priorityOfLane(origin.lane), priority }); }
+            catch (e) { console.error("[kanban] priority change failed", e); }
+          }
+          if (groupBy === "user" && lane !== null && lane !== origin.lane) laneSource.relane(task.id, lane);
+
           // 2. Rank (and status) for the drop position.
           const rows = columnTasks(board, targetColumn, lane);
           const idx = rows.findIndex((r) => r.id === task.id);
@@ -251,6 +265,8 @@ export function buildBoardConfig(el: HTMLElement, opts: BoardOptions): Partial<T
           const next = idx >= 0 && idx < rows.length - 1 ? rows[idx + 1] : null;
           const prevRank = prev ? prev.rank : null;
           const nextRank = next ? next.rank : null;
+          // A lane-only move into an empty cell (same status, no neighbours) leaves the global rank alone.
+          if (!prev && !next && targetStatus === origin.status) continue;
           const optimistic = rankBetween(prevRank, nextRank);
           for (const c of cardsOf(board, task.taskId)) c.set({ rank: optimistic.rank, weight: optimistic.rank, status: targetStatus });
           for (const r of rows) if (r.taskId !== task.taskId && r.weight !== r.rank) r.set({ weight: r.rank });

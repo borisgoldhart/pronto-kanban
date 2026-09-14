@@ -55,6 +55,12 @@ export const NO_DEPARTMENT_LANE = "__nodepartment";
 export const NO_PROJECT_LANE = "__noproject";
 export const NO_PRIORITY_LANE = "__nopriority";
 const PRIORITY_LANES: Record<number, string> = { 1: "P1", 2: "P2", 3: "P3" };
+/** Priority lane id -> priority value (0 for the "No priority" lane). */
+export function priorityOfLane(lane: string): number {
+  const m = /^p([123])$/.exec(lane);
+  return m ? Number(m[1]) : 0;
+}
+export function priorityLabel(priority: number): string { return PRIORITY_LANES[priority] || "No priority"; }
 
 /** Project code: the job extension Pronto shows (e.g. "2298", "AGRESSO"); the id when the job has none. */
 export function jobCode(t: ProntoTask): string {

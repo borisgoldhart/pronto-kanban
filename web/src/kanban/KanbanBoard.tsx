@@ -46,6 +46,7 @@ export function KanbanBoard({ tasks, columns, lanes, groupBy, groupKey, showProj
         onMove: (r) => callbacksRef.current.onMove(r),
         onRebalance: (r) => callbacksRef.current.onRebalance ? callbacksRef.current.onRebalance(r) : Promise.resolve([]),
         onReassign: (r) => callbacksRef.current.onReassign ? callbacksRef.current.onReassign(r) : Promise.resolve(),
+        onSetPriority: (r) => callbacksRef.current.onSetPriority ? callbacksRef.current.onSetPriority(r) : Promise.resolve(),
         onOpen: (t) => callbacksRef.current.onOpen(t),
         onHideColumn: (id) => callbacksRef.current.onHideColumn?.(id),
       },

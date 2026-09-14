@@ -11,7 +11,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { TaskBoard } from "@bryntum/taskboard";
 import { api, ApiError, type FilterOptions, type Narrowed, type ProntoTask, type SavedView, type StatusInfo, type TaskQuery, type ViewState } from "../api";
 import { KanbanBoard } from "../kanban/KanbanBoard";
-import { matchesSearch, pickTopColumns, toBoardTasks, toColumns, toLanes, type BoardTask, type GroupBy } from "../kanban/model";
+import { matchesSearch, pickTopColumns, priorityLabel, toBoardTasks, toColumns, toLanes, type BoardTask, type GroupBy } from "../kanban/model";
 import { applyRemoteChange, type BoardCallbacks } from "../kanban/board.config";
 import { ControlStrip, GROUP_OPTIONS } from "../chrome/ControlStrip";
 import { LeftNav } from "../chrome/PageChrome";
@@ -225,7 +225,7 @@ export function TaskWorkspace({ scope, job, boardKey, title, prontoBase, groupOp
       if (board) applyRemoteChange(board, taskId, { rank: Number(data.rank), status: st ? String(st.id) : undefined });
     } else if (event === "task.rebalanced" && board) {
       for (const r of (data.ranks as { id: number; rank: number }[]) || []) { const t = tasksRef.current.find((x) => x.id === r.id); if (t) t.rank = r.rank; applyRemoteChange(board, r.id, { rank: r.rank }); }
-    } else if (event === "task.assigned" || event === "board.reset") {
+    } else if (event === "task.assigned" || event === "task.priority" || event === "board.reset") {
       load(true);
     }
   });
@@ -264,6 +264,13 @@ export function TaskWorkspace({ scope, job, boardKey, title, prontoBase, groupOp
       const t = tasksRef.current.find((x) => x.id === taskId);
       if (t) t.assignees = res.assignees.map((a) => ({ ...a, avatarUrl: t.assignees.find((x) => x.id === a.id)?.avatarUrl || null }));
       setNotice(toUserId ? `Task ${taskId} reassigned to ${toUserName}.` : `Task ${taskId} unassigned.`);
+    },
+    onSetPriority: async ({ taskId, priority }) => {
+      const res = await api.setPriority({ taskId, priority, origin: CLIENT_ID });
+      const t = tasksRef.current.find((x) => x.id === taskId);
+      if (t) t.priority = res.priority;
+      if (res.write.startsWith("failed")) setNotice(`Pronto refused the priority change: ${res.write}`);
+      else setNotice(`Task ${taskId} set to ${priorityLabel(res.priority)}.`);
     },
     onOpen: (t: BoardTask) => { if (t.jobId) window.open(`${prontoBase}/v2/passport/${t.jobId}/tasklist/${t.taskId}`, "_blank", "noopener"); },
     onHideColumn: (id) => setColumnVisible(Number(id), false),

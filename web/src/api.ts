@@ -137,6 +137,8 @@ export const api = {
   rebalance: (ranks: { id: number; rank: number }[], origin?: string) => call<{ ok: true; ranks: { id: number; rank: number }[] }>("/api/kanban/rebalance", { method: "POST", body: JSON.stringify({ ranks, origin }) }),
   assign: (body: { taskId: number; assignees: { id: number; name: string; avatar: string | null }[]; origin?: string }) =>
     call<{ ok: true; taskId: number; assignees: { id: number; name: string; avatar: string | null }[] }>("/api/kanban/assign", { method: "POST", body: JSON.stringify(body) }),
+  setPriority: (body: { taskId: number; priority: number; origin?: string }) =>
+    call<{ ok: true; taskId: number; priority: number; write: string }>("/api/kanban/priority", { method: "POST", body: JSON.stringify(body) }),
   views: () => call<{ ok: true; views: SavedView[] }>("/api/kanban/views"),
   view: (id: string) => call<{ ok: true; view: SavedView & { state: ViewState } }>(`/api/kanban/views/${encodeURIComponent(id)}`),
   saveView: (body: { name: string; board: string; state: ViewState }) => call<{ ok: true; view: SavedView }>("/api/kanban/views", { method: "POST", body: JSON.stringify(body) }),

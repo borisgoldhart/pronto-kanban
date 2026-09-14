@@ -156,6 +156,18 @@ export async function updateTicketStatus(auth, taskId, status) {
   });
 }
 
+/**
+ * Set a task's priority (0 none, 1 P1 .. 3 P3) through the legacy property update, the same
+ * call the task list uses for status. Only reached with KANBAN_WRITE_STATUS=1; the demo keeps
+ * priority changes as overrides.
+ */
+export async function updateTicketPriority(auth, taskId, priority) {
+  return prontoFetch(auth, "/api.v2.php", {
+    method: "POST",
+    form: { action: "tasks", type: "update-property", task: String(taskId), property: "priority_new", value: String(priority) },
+  });
+}
+
 /** Absolute avatar URL for an avatar token. */
 export function avatarUrl(auth, token) {
   return token ? `${baseOf(auth)}/getUserProfileImage.php?id=${token}` : null;

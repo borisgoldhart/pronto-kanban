@@ -116,6 +116,14 @@ export class LaneSource {
     if (fresh.length) store.add(fresh as unknown as Rows);
   }
 
+  /** A card was dragged to another lane (User reassignment, Priority change): keep the buckets and lane counts in step so collapsing and re-opening a lane shows the card where it now is. */
+  relane(cardId: string, lane: string) {
+    const t = this.tasks.find((x) => x.id === cardId);
+    if (!t || t.lane === lane) return;
+    t.lane = lane;
+    this.index(this.tasks);
+  }
+
   /** The lane opened: add its (windowed) cards. */
   expand(board: TaskBoard, lane: string) {
     if (this.expanded.has(lane)) return;

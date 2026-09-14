@@ -8,6 +8,8 @@
  *                                ranks for that neighbourhood (called when move said rebalance).
  *   POST /api/kanban/assign      { taskId, assignees: [{id,name,avatar}], origin? } -> the task's
  *                                assignee list after a drag between User swim lanes (BR-07).
+ *   POST /api/kanban/priority    { taskId, priority (0 none, 1..3), origin? } after a drag
+ *                                between Priority swim lanes.
  *   GET  /api/kanban/prefs/:board
  *   PUT  /api/kanban/prefs/:board   { hiddenStatuses, shownStatuses, groupBy }
  *   GET  /api/kanban/views          the user's saved views (BR-08/09)
@@ -24,7 +26,7 @@ import { Router } from "express";
 import crypto from "node:crypto";
 import { rankBetween, rebalance as respace } from "../rank/rank.js";
 import { setOverride, clearAllOverrides, getPrefs, setPrefs } from "../rank/store.js";
-import { updateTicketStatus } from "../pronto.js";
+import { updateTicketPriority, updateTicketStatus } from "../pronto.js";
 import { publish } from "../realtime.js";
 import { kvEnabled, jget, jset, del } from "../kv.js";
 
@@ -86,6 +88,20 @@ router.post("/assign", async (req, res) => {
 
 router.get("/prefs/:board", async (req, res) => {
   res.json({ ok: true, prefs: await getPrefs(userKey(req), req.params.board) });
+});
+
+router.post("/priority", async (req, res) => {
+  const { taskId, priority, origin } = req.body || {};
+  const p = Number(priority);
+  if (!taskId || !Number.isInteger(p) || p < 0 || p > 3) return res.status(400).json({ ok: false, error: "taskId and priority (0..3) required" });
+  let write = "override";
+  if (WRITE_STATUS && req.pronto?.auth) {
+    const r = await updateTicketPriority(req.pronto.auth, taskId, p);
+    write = r.ok ? "pronto" : `failed: ${r.error}`;
+  }
+  const saved = await setOverride(taskId, { priority: p });
+  publish("task.priority", { taskId: Number(taskId), priority: saved.priority, by: actor(req) }, { origin });
+  res.json({ ok: true, taskId: Number(taskId), priority: saved.priority, write });
 });
 
 router.put("/prefs/:board", async (req, res) => {
