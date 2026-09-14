@@ -8,7 +8,7 @@
  * Movement rules (BRD BR-07 / C-03):
  *   - horizontal drag between status columns changes the status (any grouping);
  *   - vertical drag between User lanes reassigns the task (from -> to);
- *   - vertical drag between Department or Project lanes is refused.
+ *   - vertical drag between Department, Project or Brand lanes is refused.
  * A task shown in several lanes is several card records sharing a taskId; a change is
  * applied to every card that carries the taskId.
  *
@@ -217,7 +217,8 @@ export function buildBoardConfig(el: HTMLElement, opts: BoardOptions): Partial<T
       swimlaneCollapse: ({ source, swimlaneRecord }) => laneSource.collapse(source as TaskBoard, String(swimlaneRecord.id)),
       taskDragStart: ({ taskRecords }) => { for (const r of taskRecords) { const t = asTask(r); dragOrigin.set(r, { status: String(t.status), lane: String(t.lane) }); } },
       // Vertical moves: User lanes (reassignment) and Priority lanes (priority change) have a
-      // business meaning; Department and Project lanes do not, so a card stays in its lane there.
+      // business meaning; Department, Project and Brand lanes do not (a task's project, and so
+      // its brand, is not changed from a board), so a card stays in its lane there.
       beforeTaskDrop: ({ taskRecords, targetColumn, targetSwimlane }) => {
         // The Parent status is a container, not a workflow step: nothing is dropped into it.
         if (targetColumn && columnById.get(String(targetColumn.id))?.isParent) return false;

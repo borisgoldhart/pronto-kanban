@@ -8,14 +8,14 @@
  *
  * Rank and weight are the same number: the global Kanban rank (see server/rank/rank.js).
  *
- * Swim lanes (BRD BR-06/07, C-02): none, User, Department, Project. A task with several
+ * Swim lanes (BRD BR-06/07, C-02): none, User, Department, Project, Brand, Priority. A task with several
  * assignees appears once per applicable User or Department lane; each appearance is a
  * separate card record (`id` = "<taskId>:<lane>") pointing at the same `taskId`, and a
  * change to the task is applied to every card that carries its taskId.
  */
 import type { ProntoTask, StatusInfo } from "../api";
 
-export type GroupBy = "none" | "user" | "department" | "project" | "priority";
+export type GroupBy = "none" | "user" | "department" | "project" | "brand" | "priority";
 
 export type BoardTask = {
   id: string;                // card id: taskId, or "taskId:lane" when a task appears in several lanes
@@ -53,6 +53,7 @@ export type BoardLane = { id: string; text: string };
 export const UNASSIGNED_LANE = "__unassigned";
 export const NO_DEPARTMENT_LANE = "__nodepartment";
 export const NO_PROJECT_LANE = "__noproject";
+export const NO_BRAND_LANE = "__nobrand";
 export const NO_PRIORITY_LANE = "__nopriority";
 const PRIORITY_LANES: Record<number, string> = { 1: "P1", 2: "P2", 3: "P3" };
 /** Priority lane id -> priority value (0 for the "No priority" lane). */
@@ -77,6 +78,13 @@ export function laneKeys(t: ProntoTask, groupBy: GroupBy): { id: string; text: s
     case "department": {
       const deps = t.departments || [];
       return deps.length ? deps.map((d) => ({ id: String(d.id), text: d.name })) : [{ id: NO_DEPARTMENT_LANE, text: "No department" }];
+    }
+    case "brand": {
+      // One lane per brand, keyed on the brand id the job carries (live tickets and the jobs
+      // lookup both supply it); the title is the fallback so rows without an id still land in
+      // the right lane rather than starting one of their own.
+      const id = t.brandId ? String(t.brandId) : t.brand ? `b:${t.brand.trim().toLowerCase()}` : NO_BRAND_LANE;
+      return [{ id, text: t.brand || "No brand" }];
     }
     case "priority":
       return PRIORITY_LANES[t.priority] ? [{ id: `p${t.priority}`, text: PRIORITY_LANES[t.priority] }] : [{ id: NO_PRIORITY_LANE, text: "No priority" }];

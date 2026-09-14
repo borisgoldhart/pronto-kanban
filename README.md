@@ -4,7 +4,7 @@ A working prototype of the Pronto Kanban built on **Bryntum TaskBoard**, driven 
 tasks from the Pronto tasks API. Two views:
 
 - **Task Explorer Kanban** (`/inbox/task-explorer`): every task the user can see, with
-  swimlanes (User, Department, Project), the system presets and saved views in
+  swimlanes (User, Department, Project, Brand, Priority), the system presets and saved views in
   the left nav, and the Task Explorer filter flyout.
 - **Project Kanban** (`/projects/:id/kanban`): one project's tasks.
 
@@ -40,8 +40,8 @@ changes are needed. The trial shows a watermark.
 |---|---|
 | BR-02 shared ranking, BR-03 seed Priority > Due Date > Created | `server/rank/rank.js` (id stands in for created date, which the tickets payload lacks) |
 | BR-04 status by drag, BR-05 visible columns remembered | `board.config.ts`, prefs API |
-| BR-06 grouping None / User / Department / Project, plus Priority (P1, P2, P3, No priority) | `model.ts` (`laneKeys`); departments from the users API |
-| BR-07 movement rules: User lanes reassign, Priority lanes set the priority (`POST /api/kanban/priority`, kept as an override like status), Department/Project lanes block vertical drag | `board.config.ts` (`beforeTaskDrop`, `taskDrop`) |
+| BR-06 grouping None / User / Department / Project, plus Priority (P1, P2, P3, No priority) and Brand | `model.ts` (`laneKeys`); departments from the users API, brand id and title from the ticket's job |
+| BR-07 movement rules: User lanes reassign, Priority lanes set the priority (`POST /api/kanban/priority`, kept as an override like status), Department/Project/Brand lanes block vertical drag | `board.config.ts` (`beforeTaskDrop`, `taskDrop`) |
 | AC-07.3 / C-02 one task in several lanes | one card record per lane sharing `taskId` |
 | BR-08/09 saved, shareable views restoring filters, columns, grouping, list / Kanban mode | `/api/kanban/views`, `?view=<id>`; the address bar also carries the whole configuration (`web/src/chrome/urlState.ts`), so a copied URL reproduces the view through the viewer's own permissions |
 | BR-10 guardrails: office default, recency window, cap, notice | `routes/tasks.js` (`applyGuardrails`); they step aside as soon as the user applies a preset or a filter (`userHasFiltered`); the notice is a 10-second toast on load and a line in the (i) popover (`TaskWorkspace.tsx`) |

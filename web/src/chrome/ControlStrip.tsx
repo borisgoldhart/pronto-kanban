@@ -15,12 +15,13 @@ import type { StatusInfo } from "../api";
 import { IconCheck, IconChevronDown, IconCollapseAll, IconColumns, IconEllipsis, IconExpandAll, IconExport, IconFilter, IconInfo, IconKanban, IconList, IconLive, IconRefresh, IconSave } from "./icons";
 import { Popover } from "./Popover";
 
-/** BRD BR-06: no grouping, User, Department, Project; Priority added 14 Sep (User Group and Office are out of the MVP). */
+/** BRD BR-06: no grouping, User, Department, Project; Priority and Brand added 14 Sep (User Group and Office are out of the MVP). */
 export const GROUP_OPTIONS: { id: GroupBy; label: string }[] = [
   { id: "none", label: "None" },
   { id: "user", label: "User" },
   { id: "department", label: "Department" },
   { id: "project", label: "Project" },
+  { id: "brand", label: "Brand" },
   { id: "priority", label: "Priority" },
 ];
 

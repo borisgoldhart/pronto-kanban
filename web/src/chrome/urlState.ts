@@ -36,7 +36,7 @@ const SCALAR_KEYS: { key: keyof Filters; param: string }[] = [
   { key: "endDate", param: "end" }, { key: "parentTask", param: "parent" }, { key: "taskType", param: "type" },
   { key: "updatedFrom", param: "updatedFrom" }, { key: "updatedTo", param: "updatedTo" },
 ];
-const GROUPS: GroupBy[] = ["none", "user", "department", "project", "priority"];
+const GROUPS: GroupBy[] = ["none", "user", "department", "project", "brand", "priority"];
 
 export function readUrlState(search = window.location.search): UrlState {
   const p = new URLSearchParams(search);
