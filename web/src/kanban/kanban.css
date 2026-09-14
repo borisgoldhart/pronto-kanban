@@ -183,8 +183,10 @@
 .pk-board-host .b-task-board-swimlane .b-task-board-column-body { min-height: 3.6em; }
 .pk-board-host .b-task-board-swimlane .b-task-board-column-body-inner { min-height: 3.6em; }
 /* Swimlanes take the height of their cards rather than sharing the board height
-   (the single implicit lane of an ungrouped board still fills it). */
+   (the single implicit lane of an ungrouped board still fills it). A column inside a
+   swimlane is capped at 400px and scrolls, so more lanes fit on screen. */
 .pk-board-host .pk-board--lanes .b-task-board-swimlane { flex: 0 0 auto !important; }
+.pk-board-host .pk-board--lanes .b-task-board-column-body { max-height: 400px; overflow-y: auto; }
 .pk-board-host .b-task-board-swimlane .b-task-board-column-body { min-height: 3.2em; }
 
 /* ---- "Show more" card at the end of a paged column (a card record, see lanes.ts) ---- */

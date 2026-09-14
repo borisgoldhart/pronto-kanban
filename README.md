@@ -40,14 +40,14 @@ changes are needed. The trial shows a watermark.
 |---|---|
 | BR-02 shared ranking, BR-03 seed Priority > Due Date > Created | `server/rank/rank.js` (id stands in for created date, which the tickets payload lacks) |
 | BR-04 status by drag, BR-05 visible columns remembered | `board.config.ts`, prefs API |
-| BR-06 grouping None / User / Department / Project | `model.ts` (`laneKeys`); departments from the users API |
+| BR-06 grouping None / User / Department / Project, plus Priority (P1, P2, P3, No priority) | `model.ts` (`laneKeys`); departments from the users API |
 | BR-07 movement rules: User lanes reassign, Department/Project lanes block vertical drag | `board.config.ts` (`beforeTaskDrop`, `taskDrop`) |
 | AC-07.3 / C-02 one task in several lanes | one card record per lane sharing `taskId` |
 | BR-08/09 saved, shareable views restoring filters, columns, grouping | `/api/kanban/views`, `?view=<id>` |
-| BR-10 guardrails: office default, recency window, cap, notice | `routes/tasks.js` (`applyGuardrails`); they step aside as soon as the user applies a preset or a filter (`userHasFiltered`); notice in `TaskWorkspace.tsx` |
+| BR-10 guardrails: office default, recency window, cap, notice | `routes/tasks.js` (`applyGuardrails`); they step aside as soon as the user applies a preset or a filter (`userHasFiltered`); the notice is a 10-second toast on load and a line in the (i) popover (`TaskWorkspace.tsx`) |
 | BR-11 quick search over the active dataset | client-side `matchesSearch` |
 | BR-12 compact cards, hover preview | one card per row, two-row template (`card.ts`); the card size selector was removed on 14 Sep; hover preview after 1.4s (`cardPreview`) |
-| BR-06 grouped boards open with only the first swimlane expanded; Expand all / Collapse all in the strip | `TaskWorkspace.tsx` (`collapsedLanes`), `board.config.ts` (`setAllLanesCollapsed`) |
+| BR-06 grouped boards open with only the first swimlane expanded; expand / collapse all toggle in the strip; a column inside a swimlane is capped at 400px and scrolls | `TaskWorkspace.tsx` (`collapsedLanes`), `board.config.ts` (`setAllLanesCollapsed`) |
 | Performance on grouped boards: only expanded lanes hold cards (lane-lazy loading); header counts from the full list | `web/src/kanban/lanes.ts` (`LaneSource`), wired in `board.config.ts` |
 | BR-13 parent / subtask marker | `isParent`, `parentId` chips |
 | BR-15 live updates | Pusher channel `private-kanban` (`server/realtime.js`, `web/src/realtime.ts`); periodic refresh stands in for Pronto-originated changes (BR-14) |

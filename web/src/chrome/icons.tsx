@@ -74,3 +74,7 @@ export const IconExpandAll = ({ size = 14, ...p }: P) => (
 export const IconCollapseAll = ({ size = 14, ...p }: P) => (
   <svg viewBox="0 0 16 16" width={size} height={size} aria-hidden="true" {...p}><path fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" d="M4.5 2.5 8 6l3.5-3.5M4.5 13.5 8 10l3.5 3.5" /></svg>
 );
+
+export const IconInfo = ({ size = 14, ...p }: P) => (
+  <svg viewBox="0 0 16 16" width={size} height={size} aria-hidden="true" {...p}><circle cx="8" cy="8" r="6.6" fill="none" stroke="currentColor" strokeWidth="1.4" /><path fill="currentColor" d="M7.2 7h1.6v4.6H7.2V7Zm.8-2.6a.95.95 0 1 1 0 1.9.95.95 0 0 1 0-1.9Z" /></svg>
+);

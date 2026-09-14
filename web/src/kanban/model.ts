@@ -15,7 +15,7 @@
  */
 import type { ProntoTask, StatusInfo } from "../api";
 
-export type GroupBy = "none" | "user" | "department" | "project";
+export type GroupBy = "none" | "user" | "department" | "project" | "priority";
 
 export type BoardTask = {
   id: string;                // card id: taskId, or "taskId:lane" when a task appears in several lanes
@@ -53,6 +53,8 @@ export type BoardLane = { id: string; text: string };
 export const UNASSIGNED_LANE = "__unassigned";
 export const NO_DEPARTMENT_LANE = "__nodepartment";
 export const NO_PROJECT_LANE = "__noproject";
+export const NO_PRIORITY_LANE = "__nopriority";
+const PRIORITY_LANES: Record<number, string> = { 1: "P1", 2: "P2", 3: "P3" };
 
 /** Project code: the job extension Pronto shows (e.g. "2298", "AGRESSO"); the id when the job has none. */
 export function jobCode(t: ProntoTask): string {
@@ -70,6 +72,8 @@ export function laneKeys(t: ProntoTask, groupBy: GroupBy): { id: string; text: s
       const deps = t.departments || [];
       return deps.length ? deps.map((d) => ({ id: String(d.id), text: d.name })) : [{ id: NO_DEPARTMENT_LANE, text: "No department" }];
     }
+    case "priority":
+      return PRIORITY_LANES[t.priority] ? [{ id: `p${t.priority}`, text: PRIORITY_LANES[t.priority] }] : [{ id: NO_PRIORITY_LANE, text: "No priority" }];
     default:
       return [{ id: "", text: "" }];
   }
@@ -138,7 +142,7 @@ export function toLanes(tasks: ProntoTask[], groupBy: GroupBy): BoardLane[] {
   lanes.sort((a, b) => {
     const aTail = a.id.startsWith("__"), bTail = b.id.startsWith("__");
     if (aTail !== bTail) return aTail ? 1 : -1;
-    return a.text.localeCompare(b.text);
+    return groupBy === "priority" ? a.id.localeCompare(b.id) : a.text.localeCompare(b.text);   // P1, P2, P3, then No priority
   });
   return lanes;
 }

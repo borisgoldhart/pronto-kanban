@@ -50,7 +50,7 @@ export default function App() {
         <Banner title={id === DEMO_PROJECT.id ? DEMO_PROJECT.title : `Project ${id}`} code={String(id)} />
         <Tabs items={PROJECT_TABS} active="Tasks" />
         <TaskWorkspace scope="project" job={id} boardKey={`project:${id}`} title="Tasks" prontoBase={prontoBase} defaultGroupBy="none" viewId={viewId}
-          groupOptions={[{ id: "none", label: "None" }, { id: "user", label: "User" }, { id: "department", label: "Department" }]} />
+          groupOptions={[{ id: "none", label: "None" }, { id: "user", label: "User" }, { id: "department", label: "Department" }, { id: "priority", label: "Priority" }]} />
         <DemoSwitch current="project" go={go} />
       </div>
     );

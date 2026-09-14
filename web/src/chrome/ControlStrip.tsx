@@ -3,20 +3,24 @@
  * Kanban controls sit on the same line as the filter and export buttons, the zoom is
  * compact, and the supplementary actions live behind an ellipsis).
  *
- *   ALL TASKS  16 tasks        [list|kanban]  Group by [Project v] [expand|collapse]  [Columns v]  [filter]  [...]
+ *   ALL TASKS (i) [chip x] [chip x]        [list|kanban]  Group by [Project v] [^v]  [Columns v]  [filter]  [...]
+ *
+ * The count, live state and data source sit behind the (i) icon; the applied filters
+ * are chips in the strip itself, so nothing sits between the strip and the column headers.
  */
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import type { GroupBy } from "../kanban/model";
 import type { StatusInfo } from "../api";
-import { IconCheck, IconChevronDown, IconCollapseAll, IconColumns, IconEllipsis, IconExpandAll, IconExport, IconFilter, IconKanban, IconList, IconLive, IconRefresh, IconSave } from "./icons";
+import { IconCheck, IconChevronDown, IconCollapseAll, IconColumns, IconEllipsis, IconExpandAll, IconExport, IconFilter, IconInfo, IconKanban, IconList, IconLive, IconRefresh, IconSave } from "./icons";
 import { Popover } from "./Popover";
 
-/** BRD BR-06: no grouping, User, Department, Project (User Group and Office are out of the MVP). */
+/** BRD BR-06: no grouping, User, Department, Project; Priority added 14 Sep (User Group and Office are out of the MVP). */
 export const GROUP_OPTIONS: { id: GroupBy; label: string }[] = [
   { id: "none", label: "None" },
   { id: "user", label: "User" },
   { id: "department", label: "Department" },
   { id: "project", label: "Project" },
+  { id: "priority", label: "Priority" },
 ];
 
 export type ControlStripProps = {
@@ -28,8 +32,8 @@ export type ControlStripProps = {
   groupBy: GroupBy;
   onGroupBy: (g: GroupBy) => void;
   groupOptions?: { id: GroupBy; label: string }[];
-  onExpandAll?: () => void;
-  onCollapseAll?: () => void;
+  lanesOpen?: boolean;              // grouped boards: are the lanes expanded? (toggle icon)
+  onToggleLanes?: () => void;
   statuses: StatusInfo[];
   hidden: Set<number>;
   onToggleStatus: (id: number) => void;
@@ -42,20 +46,32 @@ export type ControlStripProps = {
   onSaveView?: () => void;
   source?: string;
   live?: "off" | "connecting" | "live" | "error";
+  info?: ReactNode;                 // extra lines for the (i) popover (guardrails, data source)
+  chips?: ReactNode;                // applied-filter chips rendered inside the strip
 };
 
 export function ControlStrip(p: ControlStripProps) {
-  const [menu, setMenu] = useState<"group" | "columns" | "more" | null>(null);
+  const [menu, setMenu] = useState<"group" | "columns" | "more" | "info" | null>(null);
   const toggle = (m: typeof menu) => setMenu((cur) => (cur === m ? null : m));
   const groupLabel = (p.groupOptions || GROUP_OPTIONS).find((g) => g.id === p.groupBy)?.label || "None";
-  const hiddenCount = p.statuses.filter((s) => p.hidden.has(s.id)).length;
+  const liveText = p.live === "live" ? "connected" : p.live === "connecting" ? "connecting" : p.live === "error" ? "error" : "off (no relay configured)";
 
   return (
     <div className="pk-strip">
       <div className="pk-strip__title">
         <h2>{p.title}</h2>
-        <span className="pk-strip__count">{p.count.toLocaleString()} {p.count === 1 ? "task" : "tasks"}{p.total > p.count ? ` of ${p.total.toLocaleString()}` : ""}</span>
-        {p.live === "live" && <span className="pk-live" title="Live updates connected"><IconLive /> Live</span>}
+        <div className="pk-control">
+          <button type="button" className={`pk-infobtn ${p.live === "live" ? "is-live" : ""}`} onClick={() => toggle("info")} onMouseEnter={() => setMenu("info")} aria-haspopup="dialog" aria-expanded={menu === "info"} title="About this board"><IconInfo /></button>
+          <Popover open={menu === "info"} onClose={() => setMenu(null)} align="start" width={280}>
+            <div className="pk-info" onMouseLeave={() => setMenu((m) => (m === "info" ? null : m))}>
+              <div className="pk-info__row"><strong>{p.count.toLocaleString()}</strong> {p.count === 1 ? "task" : "tasks"}{p.total > p.count ? ` of ${p.total.toLocaleString()}` : ""}</div>
+              <div className="pk-info__row"><span className={`pk-live ${p.live === "live" ? "" : "is-off"}`}><IconLive /> Live updates</span> {liveText}</div>
+              {p.source && <div className="pk-info__row">Data: {p.source === "pronto" ? "live from Pronto" : "captured Beta fixtures"}</div>}
+              {p.info}
+            </div>
+          </Popover>
+        </div>
+        {p.chips}
       </div>
 
       <div className="pk-strip__controls">
@@ -78,15 +94,14 @@ export function ControlStrip(p: ControlStripProps) {
           </Popover>
         </div>
         {p.groupBy !== "none" && (
-          <div className="pk-seg pk-seg--lanes" role="group" aria-label="Swimlanes">
-            <button type="button" className="pk-seg__btn" onClick={p.onExpandAll} title="Expand all swimlanes"><IconExpandAll /><span>Expand all</span></button>
-            <button type="button" className="pk-seg__btn" onClick={p.onCollapseAll} title="Collapse all swimlanes"><IconCollapseAll /><span>Collapse all</span></button>
-          </div>
+          <button type="button" className="pk-iconbtn pk-iconbtn--boxed" onClick={p.onToggleLanes} title={p.lanesOpen ? "Collapse all swimlanes" : "Expand all swimlanes"} aria-pressed={Boolean(p.lanesOpen)}>
+            {p.lanesOpen ? <IconCollapseAll /> : <IconExpandAll />}
+          </button>
         )}
 
         <div className="pk-control">
           <button type="button" className="pk-select" onClick={() => toggle("columns")} aria-haspopup="menu" aria-expanded={menu === "columns"} title="Choose which statuses are shown as columns">
-            <IconColumns /><span>Columns</span>{hiddenCount > 0 && <span className="pk-badge">{p.statuses.length - hiddenCount}/{p.statuses.length}</span>}<IconChevronDown />
+            <IconColumns /><span>Columns</span><IconChevronDown />
           </button>
           <Popover open={menu === "columns"} onClose={() => setMenu(null)} width={280}>
             <div className="pk-menu__head">Columns <button type="button" className="pk-link" onClick={p.onShowAllStatuses}>Show all</button></div>
@@ -117,7 +132,6 @@ export function ControlStrip(p: ControlStripProps) {
             <button type="button" className="pk-menu__item" onClick={() => { p.onReload(); setMenu(null); }}><IconRefresh /> Reload tasks</button>
             <div className="pk-menu__sep" />
             <button type="button" className="pk-menu__item" onClick={() => { p.onResetOrder(); setMenu(null); }}>Reset Kanban order</button>
-            {p.source && <div className="pk-menu__note">Data: {p.source === "pronto" ? "live from Pronto" : "captured Beta fixtures"}<br />Live updates: {p.live === "live" ? "connected" : p.live === "connecting" ? "connecting" : p.live === "error" ? "error" : "off (no relay configured)"}</div>}
           </Popover>
         </div>
       </div>

@@ -92,6 +92,9 @@ export function TaskWorkspace({ scope, job, boardKey, title, prontoBase, groupOp
   const [hiddenOverride, setHiddenOverride] = useState<Set<number>>(new Set());
   const [shownOverride, setShownOverride] = useState<Set<number>>(new Set());
   const [laneRequest, setLaneRequest] = useState<{ collapsed: boolean; seq: number } | null>(null);
+  const [lanesOpen, setLanesOpen] = useState(false);                     // grouped boards open collapsed (all but the first lane)
+  const toggleLanes = () => { setLaneRequest((r) => ({ collapsed: lanesOpen, seq: (r?.seq || 0) + 1 })); setLanesOpen((v) => !v); };
+  useEffect(() => { setLanesOpen(false); }, [groupBy]);
   const [options, setOptions] = useState<FilterOptions | null>(null);
   const [narrow, setNarrow] = useState(true);                            // BR-10 guardrails on
   const [prefsLoaded, setPrefsLoaded] = useState(false);
@@ -279,6 +282,14 @@ export function TaskWorkspace({ scope, job, boardKey, title, prontoBase, groupOp
   };
 
   const n = meta.narrowed;
+  const narrowKey = n?.applied ? `${n.office?.id ?? ""}|${n.recencyDays ?? ""}|${n.cappedTo ?? ""}|${n.total}|${n.shown}` : "";
+  const [toastKey, setToastKey] = useState<string | null>(null);         // the narrowing the toast is showing, or null when hidden
+  useEffect(() => {
+    if (!narrowKey) { setToastKey(null); return; }
+    setToastKey(narrowKey);
+    const t = window.setTimeout(() => setToastKey((k) => (k === narrowKey ? null : k)), 10_000);
+    return () => window.clearTimeout(t);
+  }, [narrowKey]);
   const narrowedText = n?.applied ? [
     n.office ? `your office (${n.office.name})` : null,
     n.recencyDays ? `activity in the last ${n.recencyDays} days` : null,
@@ -295,26 +306,28 @@ export function TaskWorkspace({ scope, job, boardKey, title, prontoBase, groupOp
           title={title} count={visibleTasks.length} total={n?.total ?? meta.total}
           view={view} onView={setView}
           groupBy={groupBy} onGroupBy={setGroupBy} groupOptions={groupOptions}
-          onExpandAll={() => setLaneRequest((r) => ({ collapsed: false, seq: (r?.seq || 0) + 1 }))}
-          onCollapseAll={() => setLaneRequest((r) => ({ collapsed: true, seq: (r?.seq || 0) + 1 }))}
+          lanesOpen={lanesOpen} onToggleLanes={toggleLanes}
           statuses={statuses} hidden={hiddenSet} onToggleStatus={toggleStatus} onShowAllStatuses={showAllStatuses}
           filtersOpen={filtersOpen} filterCount={countActive(filters)} onToggleFilters={() => setFiltersOpen((v) => !v)}
           onResetOrder={resetOrder} onReload={() => load()} onSaveView={saveCurrentView} source={meta.source} live={live}
+          chips={<AppliedFilters chips={chips} filters={filters} onChange={(f) => { setFilters(f); setActiveView(null); }} />}
+          info={<>
+            {narrowedText && <div className="pk-info__row pk-info__row--guard">Narrowed to {narrowedText} (the full set is above the {n!.threshold.toLocaleString()}-task limit). <button type="button" className="pk-link" onClick={() => setNarrow(false)}>Show everything</button></div>}
+            {!narrow && scope === "explorer" && <div className="pk-info__row pk-info__row--guard">Guardrails are off: showing up to {meta.truncated ? "the first " : ""}{tasks.length.toLocaleString()} tasks{meta.truncated ? ` of ${meta.total.toLocaleString()}` : ""}. <button type="button" className="pk-link" onClick={() => setNarrow(true)}>Back to the default view</button></div>}
+          </>}
         />
 
-        <AppliedFilters chips={chips} filters={filters} onChange={(f) => { setFilters(f); setActiveView(null); }} />
-        {error && <div className="pk-alert pk-alert--error" role="alert">{error}</div>}
-        {notice && <div className="pk-alert" role="status">{notice} <button type="button" className="pk-link" onClick={() => setNotice(null)}>Dismiss</button></div>}
-        {narrowedText && !error && (
-          <div className="pk-alert pk-alert--guard" role="status">
-            <strong>Showing {n!.shown.toLocaleString()} of {n!.total.toLocaleString()} tasks.</strong> The view was narrowed to {narrowedText} because the full set is above the {n!.threshold.toLocaleString()}-task limit for a board.
-            {" "}<button type="button" className="pk-link" onClick={() => setFiltersOpen(true)}>Refine filters</button>
+        {/* Overlays: nothing sits between the strip and the column headers. */}
+        {error && <div className="pk-toast pk-toast--error" role="alert">{error}</div>}
+        {notice && <div className="pk-toast" role="status">{notice} <button type="button" className="pk-toast__x" onClick={() => setNotice(null)} aria-label="Dismiss">×</button></div>}
+        {toastKey && narrowedText && !error && (
+          <div className="pk-toast pk-toast--guard" role="status">
+            <strong>Showing {n!.shown.toLocaleString()} of {n!.total.toLocaleString()} tasks.</strong> Narrowed to {narrowedText} because the full set is above the {n!.threshold.toLocaleString()}-task limit for a board.
+            {" "}<button type="button" className="pk-link" onClick={() => { setToastKey(null); setFiltersOpen(true); }}>Refine filters</button>
             {" "}<span className="pk-alert__sep">or</span>{" "}
-            <button type="button" className="pk-link" onClick={() => setNarrow(false)}>show everything</button>
+            <button type="button" className="pk-link" onClick={() => { setToastKey(null); setNarrow(false); }}>show everything</button>
+            <button type="button" className="pk-toast__x" onClick={() => setToastKey(null)} aria-label="Dismiss">×</button>
           </div>
-        )}
-        {!narrow && scope === "explorer" && !error && (
-          <div className="pk-alert" role="status">Guardrails are off: showing up to {meta.truncated ? "the first " : ""}{tasks.length.toLocaleString()} tasks{meta.truncated ? ` of ${meta.total.toLocaleString()}` : ""}. <button type="button" className="pk-link" onClick={() => setNarrow(true)}>Back to the default view</button></div>
         )}
 
         <div ref={areaRef} className={`pk-board-area ${loading ? "is-loading" : ""}`}>

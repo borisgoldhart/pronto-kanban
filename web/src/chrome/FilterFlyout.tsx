@@ -104,12 +104,11 @@ export function appliedChips(f: Filters, options: FilterOptions | null, statuses
   return out;
 }
 
-/** The grey chip row under the control strip. */
+/** The grey applied-filter chips, rendered inline in the control strip. */
 export function AppliedFilters({ chips, onChange, filters }: { chips: AppliedChip[]; onChange: (f: Filters) => void; filters: Filters }) {
   if (!chips.length) return null;
   return (
     <div className="pk-applied" role="status" aria-label="Applied filters">
-      <span className="pk-applied__label">Filters</span>
       {chips.map((c) => (
         <span key={c.key} className="pk-fchip">
           <span className="pk-fchip__text">{c.label}</span>
